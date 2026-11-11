@@ -20,6 +20,17 @@ The map and bundled data work from a static host such as GitHub Pages or VS Code
 
 The root `index.html` forwards visitors to the browser application at `frontend/html/index.html`. GitHub Pages serves static files only; it does not run `backend/server.js`. The app uses bundled datasets for Census profiles and map layers, provincial unemployment and GDP-R, and 2021 IEC seat counts. Treasury finance and capital-acquisition data, climate normals, World Bank indicators, and live publication feeds need a separately hosted Node API. Never point a public deployment at a developer's `127.0.0.1` address.
 
+## Deploy on Render
+
+The root `render.yaml` configures one Node web service for both the application and its API. To deploy:
+
+1. Sign in to Render and choose **New → Blueprint**.
+2. Connect the `VinnyLearnsCode/CivicStats-SA` GitHub repository and select its deployment branch.
+3. Review the `civicstats-sa` service and apply the Blueprint.
+4. When the service is live, open its `onrender.com` URL. The dashboard is served at `/`, and the API is available on the same origin.
+
+The service binds to Render's required public interface and uses `/api/health` for deployment health checks. The Blueprint selects Render's free web-service plan; free instances may spin down while idle, so the first request after inactivity can take longer. This prototype does not require a database or persistent disk.
+
 Run the API and data checks:
 
 ```powershell

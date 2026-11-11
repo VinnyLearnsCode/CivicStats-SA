@@ -1663,7 +1663,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error("PORT must be a valid TCP port.");
   }
   const server = await createAppServer();
-  server.listen(port, "127.0.0.1", () => {
-    console.log(`CivicStats SA ready at http://127.0.0.1:${port}`);
+  const host = process.env.HOST ?? "127.0.0.1";
+  server.listen(port, host, () => {
+    console.log(`CivicStats SA ready on ${host}:${port}`);
   });
 }
