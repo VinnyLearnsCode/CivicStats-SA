@@ -22,6 +22,9 @@ const state = {
   nationalEconomyData: null,
   nationalEconomyError: null,
   nationalEconomyLoading: false,
+  nationalCensusPopulation2022: null,
+  nationalCensusPopulationLoading: false,
+  nationalCensusPopulationError: null,
   nationalGdpHistory: null,
   nationalGdpHistoryLoading: false,
   nationalGdpHistoryError: null,
@@ -76,6 +79,7 @@ const state = {
   toastTimer: null
 };
 let provinceCensus2022Promise = null;
+let nationalCensus2022Promise = null;
 
 const indicatorGuideEntries = [
   { name: "Population", category: "Demographics", definition: "The number of people counted for a municipality in the relevant Census. It is a count, not a current population estimate.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "Census figures describe their census dates; they are not updated between censuses." },
@@ -1606,6 +1610,21 @@ async function getProvinceCensusPopulation(province) {
   const record = dataset.records.find((item) => item.province === province);
   if (!record) throw new Error(`No Census 2022 population record is available for ${province}.`);
   return { population: record.population, source: dataset.source };
+}
+
+function getNationalCensusPopulation2022() {
+  if (!nationalCensus2022Promise) {
+    nationalCensus2022Promise = getProvinceCensusPopulation("Gauteng")
+      .then(async () => {
+        const dataset = await provinceCensus2022Promise;
+        return { population: dataset.nationalTotal, source: dataset.source };
+      })
+      .catch((error) => {
+        nationalCensus2022Promise = null;
+        throw error;
+      });
+  }
+  return nationalCensus2022Promise;
 }
 
 function renderOverviewCensus(selected) {
@@ -3409,6 +3428,11 @@ function updateProfile(selected) {
     .filter((name, index, list) => name && name !== selected.name && list.indexOf(name) === index)
     .join(" · ");
   profileLocation.textContent = location || formatBoundaryLevel(selected.level);
+  document.querySelector("#profile-code-label").textContent = selected.level === "ADM3"
+    ? "OFFICIAL MUNICIPAL CODE"
+    : "OFFICIAL GEOGRAPHIC CODE";
+  document.querySelector("#profile-boundary-label").textContent = "UNIQUE BOUNDARY ID · GEOBOUNDARIES";
+  document.querySelector("#profile-area-label").textContent = "AREA · BOUNDARY-DERIVED";
   document.querySelector("#profile-code").textContent = selected.officialCode ??
     state.censusMapRecords.get(selected.id)?.censusCode ?? "Data unavailable";
   document.querySelector("#profile-boundary-id").textContent = selected.id || "—";
@@ -3477,39 +3501,98 @@ function renderGeographyChildren(selected) {
   container.hidden = false;
 }
 
+function updateNationalProfileSummary() {
+  if (state.selected) return;
+  const provinces = state.geographies.filter((item) => item.level === "ADM1");
+  const provinceCount = provinces.length;
+  const municipalityCount = state.municipalities.length;
+  profileName.textContent = "South Africa";
+  profileLocation.textContent = provinceCount && municipalityCount
+    ? `${provinceCount} provinces · ${municipalityCount} municipalities`
+    : "National geographic coverage";
+  document.querySelector("#profile-scope-label").textContent = "NATIONAL OVERVIEW";
+  document.querySelector("#profile-type").textContent = "COUNTRYWIDE";
+  document.querySelector("#profile-code-label").textContent = "ADMINISTRATIVE COVERAGE";
+  document.querySelector("#profile-code").textContent = provinceCount && municipalityCount
+    ? `${provinceCount} provinces · ${municipalityCount} municipalities`
+    : "Loading coverage…";
+  document.querySelector("#profile-boundary-label").textContent = "GEOGRAPHY SCOPE";
+  document.querySelector("#profile-boundary-id").textContent = "South Africa · national";
+  document.querySelector("#profile-population-label").textContent = "POPULATION · CENSUS 2022";
+  document.querySelector("#profile-population-note").textContent = state.nationalCensusPopulation2022
+    ? `${state.nationalCensusPopulation2022.source.publisher} · Census 2022 · official national total`
+    : state.nationalCensusPopulationError
+      ? "Stats SA Census 2022 national total unavailable"
+      : "Loading official Stats SA national total…";
+  document.querySelector("#profile-population").textContent = state.nationalCensusPopulation2022
+    ? formatCensusNumber(state.nationalCensusPopulation2022.population)
+    : state.nationalCensusPopulationError ? "Unavailable" : "Loading…";
+
+  document.querySelector("#profile-area-label").textContent = "AREA · BOUNDARY-DERIVED";
+  const provinceAreas = provinces.map((item) => item.areaKm2);
+  const nationalArea = provinceCount > 0 && provinceAreas.every((area) => Number.isFinite(area) && area > 0)
+    ? provinceAreas.reduce((sum, area) => sum + area, 0)
+    : null;
+  document.querySelector("#profile-area").textContent = nationalArea == null
+    ? provinceCount ? "Unavailable" : "Loading…"
+    : formatArea(nationalArea);
+  document.querySelector("#profile-area-note").textContent = nationalArea == null
+    ? "Provincial boundaries are not yet available"
+    : `Approximate sum of ${provinceCount} geoBoundaries province areas`;
+
+  const labourValues = [...state.labourMapRecords.values()]
+    .map((record) => record.officialRate)
+    .filter(Number.isFinite);
+  const unemployment = document.querySelector("#profile-unemployment");
+  const unemploymentNote = document.querySelector("#profile-unemployment-note");
+  if (labourValues.length === 9 && state.labourData) {
+    const period = state.labourData.periods.find((item) => item.code === state.labourQuarter)?.label ?? state.labourQuarter;
+    unemployment.textContent = `${formatCensusNumber(Math.min(...labourValues), 1)}–${formatCensusNumber(Math.max(...labourValues), 1)}%`;
+    unemploymentNote.textContent = `Stats SA QLFS ${period} · range across nine provincial estimates; not a national rate`;
+  } else {
+    unemployment.textContent = state.labourMapError ? "Unavailable" : "Loading…";
+    unemploymentNote.textContent = state.labourMapError
+      ? "Stats SA provincial estimates are unavailable"
+      : "Loading Stats SA province-level estimates…";
+  }
+
+  const civicScore = document.querySelector("#profile-civicscore");
+  civicScore.textContent = "NO NATIONAL SCORE";
+  civicScore.classList.add("unscored");
+  civicScore.classList.remove("civic-score-value");
+  document.querySelector("#profile-civicscore-note").textContent = "The basic-services pilot is municipality-only; no countrywide score is calculated.";
+  document.querySelector("#profile-indicator-status").textContent = "NATIONAL DATA PROFILE";
+  document.querySelector("#profile-indicator-period").textContent = state.nationalCensusPopulation2022 ? "CENSUS 2022" : "LOADING CENSUS";
+  const hasData = Boolean(state.nationalCensusPopulation2022 || labourValues.length === 9 || nationalArea != null);
+  document.querySelector("#profile-status-dot").classList.toggle("muted", !hasData);
+  document.querySelector("#source-indicator-dot").classList.toggle("loaded", hasData);
+  document.querySelector("#source-indicator-label").textContent = hasData ? "NATIONAL SOURCES" : "LOADING SOURCES";
+  document.querySelector("#source-summary-note").textContent = "National Census population, provincial QLFS range and mapped administrative coverage.";
+  document.querySelector("#open-municipality-profile").disabled = true;
+  updateBreadcrumb();
+
+  if (!state.nationalCensusPopulation2022 && !state.nationalCensusPopulationLoading && !state.nationalCensusPopulationError) {
+    state.nationalCensusPopulationLoading = true;
+    void getNationalCensusPopulation2022().then((result) => {
+      state.nationalCensusPopulation2022 = result;
+      state.nationalCensusPopulationError = null;
+    }).catch((error) => {
+      state.nationalCensusPopulationError = error.message;
+    }).finally(() => {
+      state.nationalCensusPopulationLoading = false;
+      updateNationalProfileSummary();
+    });
+  }
+}
+
 function clearGeographySelection() {
   state.selected = null;
   setMobileProfileOpen(false);
   state.profileSummaryRequestId += 1;
-  profileName.textContent = "South Africa";
-  profileLocation.textContent = "Select a province, district or municipality";
-  document.querySelector("#profile-scope-label").textContent = "NATIONAL OVERVIEW";
-  document.querySelector("#profile-type").textContent = "Select a place";
-  document.querySelector("#profile-population-label").textContent = "POPULATION · CENSUS 2022";
-  document.querySelector("#profile-code").textContent = "Data unavailable";
-  document.querySelector("#profile-boundary-id").textContent = "—";
-  document.querySelector("#profile-area").textContent = "Data unavailable";
-  document.querySelector("#profile-area-note").textContent = "Select a geographic boundary";
-  document.querySelector("#profile-population").textContent = "Data unavailable";
-  document.querySelector("#profile-population-note").textContent = "Select a municipality for Census indicators";
-  const civicScore = document.querySelector("#profile-civicscore");
-  civicScore.textContent = "NOT SCORED";
-  civicScore.classList.add("unscored");
-  civicScore.classList.remove("civic-score-value");
-  document.querySelector("#profile-civicscore-note").textContent = "Select a municipality for the basic-services pilot";
-  document.querySelector("#profile-unemployment").textContent = "Data unavailable";
-  document.querySelector("#profile-unemployment-note").textContent = "Select a province or geography in a province";
-  document.querySelector("#profile-indicator-status").textContent = "SELECT A GEOGRAPHY";
-  document.querySelector("#profile-indicator-period").textContent = "—";
-  document.querySelector("#profile-status-dot").classList.add("muted");
-  document.querySelector("#source-indicator-dot").classList.remove("loaded");
-  document.querySelector("#source-indicator-label").textContent = "NOT SELECTED";
-  document.querySelector("#source-summary-note").textContent = "Choose a boundary to view available data.";
-  document.querySelector("#open-municipality-profile").disabled = true;
+  updateNationalProfileSummary();
   document.querySelector("#geography-children").hidden = true;
   document.querySelector("#geography-children").replaceChildren();
   document.querySelector("#map-location").textContent = "SOUTH AFRICA · 9 PROVINCES";
-  updateBreadcrumb();
   renderDetail();
   updatePageHeading();
   refreshMapStyles();
@@ -4184,6 +4267,7 @@ function setLabourQuarter(quarter) {
   if (select) select.value = period.code;
   refreshMapStyles();
   renderNationalHighlights();
+  if (!state.selected) updateNationalProfileSummary();
 }
 
 async function loadProvincialLabourData() {
@@ -4245,6 +4329,7 @@ async function loadProvincialLabourData() {
       refreshMapStyles();
       renderNationalMetrics();
       renderNationalHighlights();
+      if (!state.selected) updateNationalProfileSummary();
       if (state.tab === "overview" && !state.selected) renderDetail();
       if (state.selected) void updateProfileSummary(state.selected);
     });
@@ -4449,6 +4534,7 @@ async function loadCensusMapData(year) {
     refreshMapStyles();
     renderNationalMetrics();
     renderNationalHighlights();
+    if (!state.selected) updateNationalProfileSummary();
     if (state.tab === "overview" && !state.selected) renderDetail();
     if (state.view === "municipalities") renderAlternateView();
   } catch (error) {
@@ -4460,6 +4546,7 @@ async function loadCensusMapData(year) {
     refreshMapStyles();
     renderNationalMetrics();
     renderNationalHighlights();
+    if (!state.selected) updateNationalProfileSummary();
     if (state.tab === "overview" && !state.selected) renderDetail();
     if (state.view === "municipalities") renderAlternateView();
   }
@@ -5867,6 +5954,7 @@ async function initialize() {
   const sharedQuarter = sharedParams.get("quarter");
   if (/^\d{4}Q[1-4]$/.test(sharedQuarter ?? "")) state.labourQuarter = sharedQuarter;
   bindEvents();
+  updateNationalProfileSummary();
   renderNationalHighlights();
   renderNationalMetrics();
   renderNationalGdpHistory();
@@ -5910,6 +5998,7 @@ async function initialize() {
     state.sources = sources;
     state.municipalities = municipalities;
     state.geographies = geographies;
+    updateNationalProfileSummary();
     state.collections.set("ADM3", collection);
     let startupCollection = collection;
     if (state.boundaryLevel !== "ADM3") {
