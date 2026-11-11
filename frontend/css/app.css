@@ -631,6 +631,10 @@ a { color: inherit; }
 }
 
 
+/* Map legends explain the measure in readable body text. */
+.map-legend { font-size: 11px; line-height: 1.5; }
+.legend-note, .legend-source-link { font-size: 10px; line-height: 1.5; }
+
 /* Readability pass: larger text, clearer hierarchy and easier controls. */
 body { font-size: 14px; line-height: 1.5; }
 .brand-copy strong { font-size: 13px; }

@@ -1609,7 +1609,7 @@ function renderFinanceRecords(parent, result, typeSelect) {
   const metadata = document.createElement("p");
   metadata.className = "finance-source-note";
   metadata.textContent = result.treasuryMunicipality
-    ? `${result.treasuryMunicipality.name} · reporting year ${result.year} · Treasury amounts are integer South African rand. Raw facts retain the source function, line item and amount type.`
+    ? `${result.treasuryMunicipality.name} · reporting year ${result.year} · amounts are in South African rand (ZAR). Function means service area; line item means the specific accounting entry; type is Treasury’s reporting category. Different types are kept separate.`
     : `No exact Treasury municipality and province match was found for ${result.municipality.name}; absence is not reported as zero.`;
   parent.append(metadata);
 
@@ -1685,13 +1685,14 @@ function renderFinanceRecords(parent, result, typeSelect) {
       [
         row["function.label"] ?? row["function.code"] ?? "—",
         row["item.label"] ?? row["item.code"] ?? "—",
-        row["amount_type.code"] ?? "—",
+        row["amount_type.label"] ?? row["amount_type.code"] ?? "Not labelled by source",
         typeof amount === "number" && Number.isFinite(amount)
           ? new Intl.NumberFormat("en-ZA", { maximumFractionDigits: 2 }).format(amount)
           : "—"
       ].forEach((value, index) => {
         const td = document.createElement("td");
         td.textContent = String(value);
+        if (index === 2) td.title = `Treasury type code: ${row["amount_type.code"] ?? "not supplied"}`;
         if (index === 3) td.className = "mono";
         tr.append(td);
       });
@@ -3586,6 +3587,23 @@ function renderMapLegend() {
               updated: "Source release 2023-10-10",
               url: "https://census.statssa.gov.za/assets/documents/2022/Provinces_at_a_Glance.pdf"
             };
+  const interpretation = state.mapLayer === "unemployment"
+    ? "Shows the share of each province’s labour force without work. These are provincial survey estimates, not municipal rates."
+    : state.mapLayer === "economy"
+      ? "Shows each province’s share of South Africa’s economy for the selected year. It does not show municipal economic output."
+      : state.mapLayer === "growth"
+        ? "Shows the change between the 2011 and 2022 Censuses. It is not an annual growth rate or a forecast."
+        : state.mapLayer === "population"
+          ? "People per square kilometre, calculated from the Census population and municipal area."
+          : state.mapLayer === "electricity"
+            ? "Share of households reporting electricity as their main source for lighting. It does not measure outages or reliability."
+            : "Share of households in the Census water-scheme category. It does not measure current water quality or supply interruptions.";
+  const interpretationNote = document.createElement("span");
+  interpretationNote.className = "legend-note legend-interpretation";
+  interpretationNote.textContent = interpretation;
+  const scaleNote = document.createElement("span");
+  scaleNote.className = "legend-note";
+  scaleNote.textContent = "Colours are grouped into five bands for the areas currently shown. Use the value in each area’s tooltip for precise comparisons.";
   const missing = document.createElement("span");
   missing.className = "map-legend-range";
   const missingSwatch = document.createElement("i");
@@ -3596,7 +3614,7 @@ function renderMapLegend() {
   const note = document.createElement("span");
   note.className = "legend-note";
   note.textContent = `${layerMetadata.detail} ${layerMetadata.updated}. Neutral fill indicates missing data.`;
-  items.append(missing, note);
+  items.append(interpretationNote, scaleNote, missing, note);
   if (layerMetadata.url) {
     const sourceLink = document.createElement("a");
     sourceLink.className = "legend-source-link";
