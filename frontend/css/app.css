@@ -629,3 +629,84 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+
+/* Readability pass: larger text, clearer hierarchy and easier controls. */
+body { font-size: 14px; line-height: 1.5; }
+.brand-copy strong { font-size: 13px; }
+.brand-copy small { font-size: 10px; }
+.nav-group h2 { font-size: 10px; }
+.nav-link { min-height: 38px; font-size: 12px; }
+.nav-status { font-size: 9px; }
+.sidebar-footer > span:nth-child(2) { font-size: 11px; }
+.sidebar-footer small { font-size: 10px; }
+.breadcrumbs { font-size: 12px; }
+.global-search { min-height: 36px; }
+.global-search input { font-size: 12px; }
+.global-search kbd { font-size: 10px; }
+.data-status { font-size: 10px; }
+.eyebrow, .panel-kicker { font-size: 10px; }
+.workspace-header p { font-size: 13px; line-height: 1.5; }
+.header-meta { font-size: 10px; }
+.section-tab { min-height: 40px; font-size: 12px; }
+.panel-heading h2 { font-size: 15px; }
+.compact-heading h2 { font-size: 14px; }
+.compact-select-label { font-size: 10px; }
+.compact-select { min-height: 34px; font-size: 12px; }
+.focus-card h3 { font-size: 14px; }
+.focus-card p, .ops-card p { font-size: 12px; line-height: 1.6; }
+.focus-meta { font-size: 10px; }
+.summary-card .label, .ops-label { font-size: 10px; }
+.summary-card span { font-size: 11px; line-height: 1.45; }
+.coverage-name, .coverage-state, .coverage-api-note { font-size: 10px; }
+.data-notice p, .detail-intro, .detail-item strong { font-size: 12px; line-height: 1.6; }
+.detail-item span { font-size: 10px; }
+.empty-data strong, .finance-loading strong, .audit-opinion strong { font-size: 12px; }
+.empty-data p, .finance-loading p { font-size: 11px; line-height: 1.6; }
+.empty-data code { font-size: 10px; }
+.finance-controls label, .finance-type-control, .compare-controls label, .project-search-label { font-size: 10px; }
+.finance-controls select, .finance-type-control select, .compare-controls select, .project-search-input { min-height: 38px; font-size: 12px; }
+.finance-section-title, .census-section > h3, .comparison-subheading { font-size: 13px; }
+.finance-source-note, .census-section-note, .census-provenance > p, .source-check-note { font-size: 11px; line-height: 1.6; }
+.finance-supplement > summary { font-size: 11px; }
+.finance-supplement > a, .audit-opinion a, .detail-body > a, .census-provenance > a { font-size: 11px; }
+.finance-table td, .finance-table td.mono { font-size: 10px; line-height: 1.5; }
+.census-metric > span, .census-metric > small, .census-bar-heading { font-size: 10px; line-height: 1.5; }
+.census-bar-heading > strong, .labour-series-period, .labour-series-line > strong { font-size: 10px; }
+.labour-series-line { font-size: 9px; }
+.source-summary-row { font-size: 11px; }
+.source-summary p { font-size: 10px; line-height: 1.6; }
+.data-table th { font-size: 10px; }
+.data-table td { font-size: 12px; line-height: 1.5; }
+.data-table td.mono { font-size: 10px; }
+.status-pill { font-size: 9px; }
+.source-card h3 { font-size: 14px; line-height: 1.4; }
+.source-card p { font-size: 12px; line-height: 1.6; }
+.source-card a, .source-checked-at { font-size: 10px; line-height: 1.5; }
+.publication-section > h3 { font-size: 14px; }
+.publication-item time { font-size: 10px; }
+.publication-item h4 { font-size: 12px; line-height: 1.5; }
+.publication-item p, .compare-empty, .view-empty p { font-size: 12px; line-height: 1.6; }
+.action-button { min-height: 38px; padding: 0 12px; font-size: 11px; }
+.indicator-guide-header p, .indicator-guide-entry > p { font-size: 12px; line-height: 1.6; }
+.indicator-guide-entry h3 { font-size: 13px; }
+.indicator-guide-category, .indicator-guide-entry dl { font-size: 11px; }
+.indicator-guide-search { min-height: 40px; font-size: 13px; }
+.indicator-guide-count, .indicator-guide-empty { font-size: 11px; }
+
+@media (max-width: 640px) {
+  body { font-size: 15px; }
+  .workspace-header p { font-size: 13px; }
+  .section-tab { min-height: 42px; font-size: 12px; }
+  .map-heading-actions .compact-select { max-width: 145px; }
+  .layer-control { width: 174px; }
+  .layer-option { min-height: 31px; font-size: 11px; }
+  .layer-state, .map-period-label, .map-period-label select, .control-title, .legend-heading { font-size: 9px; }
+  .map-legend, .map-legend-summary, .legend-note, .legend-source-link { font-size: 10px; }
+  .map-compare-toggle, .map-compare-chip { min-height: 34px; font-size: 10px; }
+  .coverage-row { min-height: 36px; }
+  .data-table-wrap { overscroll-behavior-inline: contain; }
+  .data-table th { font-size: 9px; }
+  .data-table td { padding: 11px 8px; }
+  .statusbar { font-size: 9px; }
+}
