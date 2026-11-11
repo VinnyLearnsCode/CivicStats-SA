@@ -5648,7 +5648,7 @@ async function initialize() {
     zoomControl: false,
     attributionControl: true,
     scrollWheelZoom: true,
-    doubleClickZoom: false,
+    doubleClickZoom: true,
     minZoom: 4,
     maxZoom: 10,
     maxBounds: [[-36, 14], [-21, 34]],
