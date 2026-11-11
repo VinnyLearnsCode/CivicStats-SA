@@ -395,6 +395,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(stylesheetText, /\.leaflet-interactive:focus-visible/);
   assert.match(stylesheetText, /\.metric-explainer/);
   assert.match(stylesheetText, /\.map-table-heading/);
+  assert.match(stylesheetText, /\.national-metrics-heading/);
   assert.equal(application.status, 200);
   assert.match(application.headers.get("content-type"), /javascript/);
   const applicationScript = await application.text();
@@ -431,6 +432,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(indexHtml, /role="combobox" aria-autocomplete="list"/);
   assert.match(indexHtml, /map-data-table-toggle/);
   assert.match(indexHtml, /export-map-table/);
+  assert.match(indexHtml, /SOUTH AFRICA AT A GLANCE/);
   assert.match(indexHtml, /id="share-view-button"/);
   assert.match(indexHtml, /aria-describedby="map-keyboard-instructions"/);
   assert.match(indexHtml, /id="map-keyboard-hint"/);

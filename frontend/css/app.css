@@ -259,6 +259,8 @@ a { color: inherit; }
 .map-panel:fullscreen .map-footer { flex: 0 0 auto; }
 
 .focus-panel { margin-bottom: 12px; }
+.national-metrics-heading { margin: 0 13px; padding: 8px 10px 0; border-top: 2px solid #52a9d2; }
+.national-metrics-heading .panel-kicker { color: #8ac4df; letter-spacing: .08em; }
 .focus-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0 13px 12px; }
 .focus-card { width: 100%; min-height: 104px; padding: 10px 11px; border: 1px solid var(--border-soft); background: linear-gradient(180deg, rgba(87, 199, 193, .04), rgba(87, 199, 193, 0)); color: inherit; cursor: pointer; font: inherit; text-align: left; }
 .focus-card:hover { border-color: #50615a; background: #1b2421; }
@@ -267,11 +269,11 @@ a { color: inherit; }
 .focus-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; color: var(--muted); font: 8px var(--mono); }
 .focus-status { color: var(--accent-soft); }
 .focus-card p { margin: 0; color: #9aa5a1; font-size: 10px; line-height: 1.5; }
-.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 13px 12px; }
-.summary-card { min-height: 70px; padding: 10px 11px; border: 1px solid var(--border-soft); background: #171d1b; }
-.summary-card .label { color: #77847f; font: 8px var(--mono); }
-.summary-card strong { display: block; margin-top: 8px; color: #e2e9e5; font-size: 18px; font-weight: 500; letter-spacing: -.04em; }
-.summary-card span { display: block; margin-top: 4px; color: #8d9a94; font-size: 9px; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; padding: 6px 13px 10px; }
+.summary-card { min-height: 58px; padding: 7px 9px; border: 1px solid var(--border-soft); border-left: 2px solid rgba(82, 169, 210, .6); background: #171d1b; }
+.summary-card .label { color: #8bbbd0; font: 8px var(--mono); }
+.summary-card strong { display: block; margin-top: 3px; color: #e2e9e5; font-size: 15px; font-weight: 500; letter-spacing: -.03em; }
+.summary-card span { display: block; margin-top: 2px; color: #8d9a94; font-size: 8px; }
 .operations-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 13px 12px; }
 .ops-card { min-height: 120px; padding: 11px 12px; border: 1px solid var(--border-soft); background: #171d1b; }
 .ops-label { display: block; color: #7a8a84; font: 7px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
