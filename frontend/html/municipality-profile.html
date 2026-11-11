@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en-ZA">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101413">
+    <title>CivicStats SA — Municipality profile</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/app.css">
+    <script defer src="/js/app.js"></script>
+  </head>
+  <body class="content-page">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="brand" href="/index.html" aria-label="CivicStats SA dashboard">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="brand-copy"><strong>CIVICSTATS</strong><small>SOUTH AFRICA</small></span>
+          <span class="brand-version">SA</span>
+        </a>
+        <div class="sidebar-scroll">
+          <nav id="primary-navigation">
+            <section class="nav-group">
+              <h2>Main</h2>
+              <a class="nav-link" href="/index.html"><span class="nav-icon">⌂</span>Dashboard</a>
+              <a class="nav-link" href="/index.html"><span class="nav-icon">◎</span>National overview</a>
+              <a class="nav-link" href="/municipality-profile.html"><span class="nav-icon">▦</span>Workspace</a>
+            </section>
+            <section class="nav-group">
+              <h2>Intelligence</h2>
+              <a class="nav-link" href="/municipality-profile.html"><span class="nav-icon">⌖</span>Municipalities</a>
+              <a class="nav-link" href="/comparisons.html"><span class="nav-icon">⇄</span>Comparisons</a>
+              <a class="nav-link" href="/reports.html"><span class="nav-icon">▧</span>Reports</a>
+            </section>
+            <section class="nav-group">
+              <h2>Data management</h2>
+              <a class="nav-link" href="/data-sources.html"><span class="nav-icon">◉</span>Data sources</a>
+              <a class="nav-link" href="/municipality-profile.html"><span class="nav-icon">▱</span>Documents</a>
+            </section>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div class="topbar-left">
+            <div class="breadcrumbs" aria-label="Location breadcrumb">
+              <span>South Africa</span><span class="crumb-separator">/</span><span>Gauteng</span><span class="crumb-separator">/</span><span class="crumb-current">City of Johannesburg</span>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <span class="data-status"><i></i> DATA STATUS <strong>BOUNDARY VERIFIED</strong></span>
+          </div>
+        </header>
+
+        <section class="workspace-header profile-page-header">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span>PUBLIC DATA INTELLIGENCE</div>
+            <h1>City of Johannesburg</h1>
+            <p>Metropolitan municipality · Gauteng province</p>
+          </div>
+          <div class="header-meta">
+            <span class="mono">MUNICIPALITY CODE <strong>JHB</strong></span>
+            <span class="meta-separator"></span>
+            <span class="mono">BOUNDARY ID <strong>ADM3</strong></span>
+          </div>
+        </section>
+
+        <section class="section-tabs" aria-label="Municipality sections">
+          <button class="section-tab active" type="button">Overview</button>
+          <button class="section-tab" type="button">Demographics</button>
+          <button class="section-tab" type="button">Politics</button>
+          <button class="section-tab" type="button">Finance</button>
+          <button class="section-tab" type="button">Climate</button>
+          <button class="section-tab" type="button">Service delivery</button>
+          <button class="section-tab" type="button">Economy</button>
+          <button class="section-tab" type="button">Documents</button>
+        </section>
+
+        <section class="page-content profile-page-layout">
+          <div class="panel detail-panel full-width">
+            <div class="panel-heading detail-heading">
+              <div><span class="panel-kicker">OVERVIEW</span><h2>Municipality profile</h2></div>
+              <button class="square-button" type="button" aria-label="Download municipality metadata">↓</button>
+            </div>
+            <div class="profile-summary-grid">
+              <div class="label-value"><span>Province</span><strong>Gauteng</strong></div>
+              <div class="label-value"><span>District</span><strong>City of Johannesburg</strong></div>
+              <div class="label-value"><span>Municipality type</span><strong>Metropolitan municipality</strong></div>
+              <div class="label-value"><span>Municipal seat</span><strong>Johannesburg</strong></div>
+              <div class="label-value"><span>Population</span><strong>Not imported</strong></div>
+              <div class="label-value"><span>Area</span><strong>Not imported</strong></div>
+              <div class="label-value"><span>Population density</span><strong>Not imported</strong></div>
+              <div class="label-value"><span>Data status</span><strong>Boundary only</strong></div>
+            </div>
+          </div>
+
+          <div class="panel stats-panel">
+            <div class="panel-heading compact-heading">
+              <div><span class="panel-kicker">KEY SIGNALS</span><h2>Operational summary</h2></div>
+            </div>
+            <div class="summary-grid">
+              <article class="summary-card">
+                <div class="label">Boundary records</div>
+                <strong>1</strong>
+                <span>Loaded municipal feature</span>
+              </article>
+              <article class="summary-card">
+                <div class="label">Data sources</div>
+                <strong>5</strong>
+                <span>Catalogued public sources</span>
+              </article>
+              <article class="summary-card">
+                <div class="label">CivicScore</div>
+                <strong>—</strong>
+                <span>Insufficient data</span>
+              </article>
+              <article class="summary-card">
+                <div class="label">Status</div>
+                <strong>Ready</strong>
+                <span>For import</span>
+              </article>
+            </div>
+          </div>
+
+          <div class="panel chart-panel">
+            <div class="panel-heading compact-heading">
+              <div><span class="panel-kicker">PRODUCTION VIEW</span><h2>Indicator readiness</h2></div>
+            </div>
+            <div class="mini-bar-chart">
+              <div><span>Demographics</span><i style="width:0%"></i><em>Not loaded</em></div>
+              <div><span>Finance</span><i style="width:0%"></i><em>Not loaded</em></div>
+              <div><span>Service delivery</span><i style="width:0%"></i><em>Not loaded</em></div>
+              <div><span>Climate</span><i style="width:0%"></i><em>Not loaded</em></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

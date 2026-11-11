@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en-ZA">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101413">
+    <meta name="description" content="Explore verified public information about South Africa's places, municipalities and public services.">
+    <title>CivicStats SA — National intelligence workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="../css/app.css">
+    <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script defer src="../js/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+        <a class="brand" href="#dashboard" aria-label="CivicStats SA dashboard">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="brand-copy">
+            <span class="brand-title"><strong>CIVICSTATS</strong><span class="brand-version">SA</span></span>
+            <small>SOUTH AFRICA</small>
+          </span>
+        </a>
+        <div class="sidebar-scroll">
+          <nav id="primary-navigation">
+            <section class="nav-group">
+              <h2>Main</h2>
+              <button class="nav-link active" data-view="dashboard"><span class="nav-icon">⌂</span>Dashboard</button>
+              <button class="nav-link" data-view="national"><span class="nav-icon">◎</span>National overview</button>
+              <button class="nav-link" data-view="workspace"><span class="nav-icon">▦</span>Workspace</button>
+            </section>
+            <section class="nav-group">
+              <h2>Intelligence</h2>
+              <button class="nav-link" data-view="municipalities"><span class="nav-icon">⌖</span>Municipalities</button>
+              <button class="nav-link" data-tab="demographics"><span class="nav-icon">◷</span>Demographics</button>
+              <button class="nav-link" data-tab="politics"><span class="nav-icon">⚖</span>Politics</button>
+              <button class="nav-link" data-tab="economy"><span class="nav-icon">⌁</span>Economy</button>
+              <button class="nav-link" data-tab="climate"><span class="nav-icon">☼</span>Climate</button>
+              <button class="nav-link" data-tab="services"><span class="nav-icon">⊞</span>Service delivery</button>
+            </section>
+            <section class="nav-group">
+              <h2>Infrastructure</h2>
+              <button class="nav-link" data-tab="services"><span class="nav-icon">ϟ</span>Electricity</button>
+              <button class="nav-link" data-tab="services"><span class="nav-icon">◌</span>Water &amp; sanitation</button>
+              <button class="nav-link" data-tab="services"><span class="nav-icon">↗</span>Roads &amp; transport</button>
+              <button class="nav-link" data-tab="services"><span class="nav-icon">▤</span>Public infrastructure</button>
+              <button class="nav-link" data-tab="documents"><span class="nav-icon">⌑</span>Projects</button>
+            </section>
+            <section class="nav-group">
+              <h2>Analysis</h2>
+              <button class="nav-link" data-view="comparisons"><span class="nav-icon">⇄</span>Comparisons</button>
+              <button class="nav-link" data-view="reports"><span class="nav-icon">▧</span>Reports</button>
+              <button class="nav-link" data-view="history"><span class="nav-icon">◴</span>Historical data</button>
+              <button class="nav-link" data-view="research"><span class="nav-icon">⌕</span>Research</button>
+            </section>
+            <section class="nav-group">
+              <h2>Data management</h2>
+              <button class="nav-link" data-view="sources"><span class="nav-icon">◉</span>Data sources</button>
+              <button class="nav-link" data-tab="documents"><span class="nav-icon">▱</span>Documents</button>
+              <button class="nav-link" data-view="imports"><span class="nav-icon">⇧</span>Data imports</button>
+            </section>
+            <section class="nav-group">
+              <h2>Account</h2>
+              <button class="nav-link" data-view="profile"><span class="nav-icon">○</span>User profile</button>
+              <button class="nav-link" data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
+            </section>
+          </nav>
+        </div>
+        <div class="sidebar-footer">
+          <span class="status-dot"></span>
+          <span><strong>Public data workspace</strong><small>Prototype · read only</small></span>
+          <button class="sidebar-collapse" id="sidebar-toggle" aria-label="Collapse navigation">‹</button>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div class="topbar-left">
+            <button class="mobile-menu" id="mobile-menu" aria-label="Open navigation">☰</button>
+            <div class="breadcrumbs" id="breadcrumbs" aria-label="Location breadcrumb">
+              <span>South Africa</span><span class="crumb-separator">/</span><span class="crumb-current">National overview</span>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <label class="global-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="global-search" type="search" placeholder="Find a municipality…" autocomplete="off" aria-label="Search municipalities">
+              <kbd>Ctrl K</kbd>
+              <div class="search-results" id="search-results" role="listbox" aria-label="Municipality search results" hidden></div>
+            </label>
+            <span class="topbar-divider"></span>
+            <span class="data-status"><i></i> DATA STATUS <strong id="data-status-label">BOUNDARIES LOADED</strong></span>
+            <button class="icon-button" id="about-button" aria-label="About CivicStats SA" title="About CivicStats SA">i</button>
+          </div>
+        </header>
+
+        <section class="workspace-header">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span>PUBLIC DATA INTELLIGENCE</div>
+            <h1 id="page-title">National overview</h1>
+            <p id="page-subtitle">A geographic view of South Africa's municipalities</p>
+          </div>
+          <div class="header-meta">
+            <span class="mono">BOUNDARY VINTAGE <strong>2020</strong></span>
+            <span class="meta-separator"></span>
+            <span class="mono">DATASET <strong>GB-OPEN · ZAF</strong></span>
+          </div>
+        </section>
+
+        <section class="section-tabs" aria-label="Municipality data categories" id="section-tabs">
+          <button class="section-tab active" data-tab="overview">Overview</button>
+          <button class="section-tab" data-tab="demographics">Demographics</button>
+          <button class="section-tab" data-tab="politics">Politics &amp; governance</button>
+          <button class="section-tab" data-tab="finance">Finance</button>
+          <button class="section-tab" data-tab="climate">Climate</button>
+          <button class="section-tab" data-tab="services">Service delivery</button>
+          <button class="section-tab" data-tab="economy">Economy</button>
+          <button class="section-tab" data-tab="documents">Documents &amp; projects</button>
+        </section>
+
+        <section class="workspace-grid" id="workspace-grid">
+          <div class="center-column">
+            <div class="map-panel panel">
+              <div class="panel-heading map-heading">
+                <div>
+                  <span class="panel-kicker">GEOGRAPHIC INTELLIGENCE <span class="live-marker"></span></span>
+                  <h2>National geographic explorer</h2>
+                </div>
+                <div class="map-heading-actions">
+                  <button class="square-button mobile-profile-toggle" id="mobile-profile-toggle" aria-label="Show municipality information" title="Municipality information">ⓘ</button>
+                  <label class="compact-select-label" for="boundary-level">BOUNDARIES</label>
+                  <select id="boundary-level" class="compact-select" aria-label="Choose boundary layer">
+                    <option value="ADM3">Municipalities</option>
+                    <option value="ADM2">Districts &amp; metros</option>
+                    <option value="ADM1">Provinces</option>
+                  </select>
+                  <button class="square-button" id="fit-map" aria-label="Show all South Africa" title="Show all South Africa">⌖</button>
+                </div>
+              </div>
+              <div class="map-wrap">
+                <div id="map" role="application" aria-label="Interactive map of South Africa"></div>
+                <div class="map-overlay map-top-left">
+                  <span class="map-coordinate" id="map-location">SOUTH AFRICA · 9 PROVINCES</span>
+                  <span class="map-scale">1 : <span id="map-scale">—</span></span>
+                </div>
+                <div class="map-overlay layer-control">
+                  <span class="control-title">MAP LAYER</span>
+                  <label class="map-period-label" id="census-period-control" for="map-census-year">CENSUS PERIOD
+                    <select id="map-census-year" aria-label="Census reporting period for thematic map layers">
+                      <option value="2022" selected>2022</option>
+                      <option value="2011">2011</option>
+                    </select>
+                  </label>
+                  <label class="map-period-label" id="labour-period-control" for="labour-quarter" hidden>QLFS QUARTER
+                    <select id="labour-quarter" aria-label="Quarter for provincial unemployment map">
+                      <option value="2026Q3" selected>Q3 2026</option>
+                    </select>
+                  </label>
+                  <label class="map-period-label" id="economy-period-control" for="economy-year" hidden>GDP-R YEAR
+                    <select id="economy-year" aria-label="Reporting year for the provincial GDP-R map">
+                      <option value="2024" selected>2024</option>
+                      <option value="2023">2023</option>
+                      <option value="2022">2022</option>
+                      <option value="2021">2021</option>
+                      <option value="2020">2020</option>
+                      <option value="2019">2019</option>
+                      <option value="2018">2018</option>
+                      <option value="2017">2017</option>
+                      <option value="2016">2016</option>
+                      <option value="2015">2015</option>
+                      <option value="2014">2014</option>
+                    </select>
+                  </label>
+                  <label class="layer-option"><input type="radio" name="map-layer" value="boundaries"><span class="layer-swatch boundary-swatch"></span><span>Administrative boundaries</span><span class="layer-state"></span></label>
+                  <label class="layer-option selected" title="Loading verified municipal Census data"><input id="population-layer-radio" type="radio" name="map-layer" value="population" checked disabled><span class="layer-swatch population-swatch"></span><span>Population density</span><span class="layer-state">LOADING</span></label>
+                  <label class="layer-option unavailable" title="Loading Stats SA provincial unemployment estimates"><input type="radio" name="map-layer" value="unemployment" disabled><span class="layer-swatch unemployment-swatch"></span><span>Unemployment · province</span><span class="layer-state">LOADING</span></label>
+                  <label class="layer-option unavailable" title="Treasury facts load in municipality profiles on demand; no compatible nationwide finance measure is loaded for map shading"><input type="radio" name="map-layer" value="finance" disabled><span class="layer-swatch muted-swatch"></span><span>Municipal finance</span><span class="layer-state">NO MAP DATA</span></label>
+                  <label class="layer-option unavailable" title="Loading Stats SA municipal electricity-for-lighting data"><input type="radio" name="map-layer" value="electricity" disabled><span class="layer-swatch services-swatch"></span><span>Electricity for household lighting</span><span class="layer-state">LOADING</span></label>
+                  <label class="layer-option unavailable" title="Loading verified municipal Census data"><input id="water-layer-radio" type="radio" name="map-layer" value="water" disabled><span class="layer-swatch services-swatch"></span><span>Water scheme household share</span><span class="layer-state">LOADING</span></label>
+                  <label class="layer-option unavailable" title="Loading Stats SA province-level GDP-R data"><input type="radio" name="map-layer" value="economy" disabled><span class="layer-swatch population-swatch"></span><span>Economic activity · province</span><span class="layer-state">LOADING</span></label>
+                </div>
+                <div class="map-overlay map-legend">
+                  <span class="legend-heading" id="map-legend-heading">BOUNDARY KEY</span>
+                  <div class="map-legend-items" id="map-legend-items">
+                    <span><i class="legend-line active-line"></i>Selected municipality</span>
+                    <span><i class="legend-line"></i>Municipal boundary</span>
+                    <span class="legend-note">Census map layers load from the local API.</span>
+                  </div>
+                </div>
+                <div class="map-loading" id="map-loading"><span class="spinner"></span>Loading verified boundary geometry…</div>
+                <div class="map-error" id="map-error" hidden></div>
+              </div>
+              <div class="map-footer">
+                <span id="boundary-count">— boundary features</span>
+                <span>Source: geoBoundaries · OCHA ROSEA / Municipal Demarcation Board</span>
+                <a href="https://www.geoboundaries.org/" target="_blank" rel="noreferrer">Source &amp; licence ↗</a>
+              </div>
+            </div>
+
+            <section class="panel focus-panel" id="focus-panel">
+              <div class="panel-heading compact-heading">
+                <div><span class="panel-kicker">GAUTENG FOCUS</span><h2>Prototype municipal highlights</h2></div>
+                <button class="text-button" data-view="comparisons">VIEW COMPARISONS <span>↗</span></button>
+              </div>
+              <div class="focus-grid" id="focus-grid"></div>
+              <div class="summary-grid" id="national-metrics"></div>
+            </section>
+
+            <section class="panel intelligence-panel">
+              <div class="panel-heading compact-heading">
+                <div><span class="panel-kicker">NATIONAL INTELLIGENCE</span><h2>Public data operating model</h2></div>
+                <button class="text-button" data-view="sources">VIEW DATA ARCHIVE <span>↗</span></button>
+              </div>
+              <div class="operations-grid">
+                <article class="ops-card">
+                  <span class="ops-label">Boundary layer</span>
+                  <strong>South Africa</strong>
+                  <p>Administrative data is loaded from geoBoundaries and remains read-only in this prototype.</p>
+                </article>
+                <article class="ops-card">
+                  <span class="ops-label">Live providers</span>
+                  <strong>Treasury &amp; SACN</strong>
+                  <p>Stats SA Census 2022 municipal profiles and National Treasury finance and audit facts are available with provenance. South African Cities Network publications load from its public feed; SALGA remains a linked publications portal.</p>
+                </article>
+                <article class="ops-card">
+                  <span class="ops-label">Methodology</span>
+                  <strong>Not scored</strong>
+                  <p>CivicScore is intentionally withheld until enough compatible indicators are imported and validated.</p>
+                </article>
+                <article class="ops-card">
+                  <span class="ops-label">Production path</span>
+                  <strong>Next release</strong>
+                  <p>Import validation, role controls, a PostgreSQL data layer, and a public admin workflow are staged next.</p>
+                </article>
+              </div>
+            </section>
+
+            <div class="lower-grid">
+              <section class="panel activity-panel">
+                <div class="panel-heading compact-heading">
+                  <div><span class="panel-kicker">DATA COVERAGE</span><h2>Indicator availability</h2></div>
+                  <button class="text-button" data-view="sources">VIEW SOURCES <span>↗</span></button>
+                </div>
+                <div class="coverage-list">
+                  <div class="coverage-row"><span class="coverage-icon">◷</span><span class="coverage-name">Demographics</span><span class="coverage-bar"><i style="width:100%"></i></span><span class="coverage-state">213 profiles</span></div>
+                  <div class="coverage-row"><span class="coverage-icon">⌁</span><span class="coverage-name">Unemployment</span><span class="coverage-bar"><i style="width:100%"></i></span><span class="coverage-state">9 provinces</span></div>
+                  <div class="coverage-row"><span class="coverage-icon">☼</span><span class="coverage-name">Climate normals</span><span class="coverage-api-note">NASA POWER</span></div>
+                  <div class="coverage-row api-coverage"><span class="coverage-icon">▤</span><span class="coverage-name">Municipal finance</span><span class="coverage-api-note">ON DEMAND</span></div>
+                  <div class="coverage-row"><span class="coverage-icon">⊞</span><span class="coverage-name">Service delivery</span><span class="coverage-bar"><i style="width:0%"></i></span><span class="coverage-state">Not loaded</span></div>
+                </div>
+              </section>
+              <section class="panel data-notice">
+                <div class="notice-symbol">!</div>
+                <div><span class="panel-kicker">DATA INTEGRITY</span><p>Census profiles cover all 213 municipalities; Stats SA QLFS unemployment covers all nine provinces; Treasury finance and NASA POWER climate normals load on demand. Municipality-level labour and industry output remain unavailable.</p><button class="text-button" data-view="sources">EXPLORE DATA SOURCES <span>↗</span></button></div>
+              </section>
+            </div>
+          </div>
+
+          <aside class="context-column" aria-label="Selected municipality">
+            <section class="panel profile-panel" id="profile-panel">
+              <div class="profile-topline"><span class="panel-kicker">MUNICIPAL PROFILE</span><span class="profile-type" id="profile-type">MUNICIPALITY</span></div>
+              <div class="profile-title">
+                <div class="profile-pin">⌖</div>
+                <div><h2 id="profile-name">Select a municipality</h2><p id="profile-location">Choose a boundary on the map or search</p></div>
+              </div>
+              <div class="profile-code-row"><span>BOUNDARY REFERENCE</span><code id="profile-code">—</code></div>
+              <div class="profile-divider"></div>
+              <div class="profile-stat-grid">
+                <div><span>POPULATION · CENSUS 2022</span><strong id="profile-population">Loading…</strong><small id="profile-population-note">Stats SA municipal profile</small></div>
+                <div><span>AREA · BOUNDARY-DERIVED</span><strong id="profile-area">—</strong><small id="profile-area-note">Not calculated</small></div>
+                <div><span>UNEMPLOYMENT · PROVINCE</span><strong id="profile-unemployment">Loading…</strong><small id="profile-unemployment-note">Stats SA QLFS · provincial estimate only</small></div>
+                <div><span>CIVICSCORE</span><strong class="unscored">NOT SCORED</strong><small>Insufficient verified data</small></div>
+              </div>
+              <div class="profile-period"><span class="status-dot muted" id="profile-status-dot"></span><span id="profile-indicator-status">LOADING VERIFIED INDICATORS</span><span class="period-spacer"></span><span id="profile-indicator-period">—</span></div>
+            </section>
+
+            <section class="panel detail-panel" id="detail-panel">
+              <div class="panel-heading detail-heading"><div><span class="panel-kicker" id="detail-kicker">OVERVIEW</span><h2 id="detail-title">At a glance</h2></div><button class="square-button" id="download-profile" title="Download profile metadata" aria-label="Download profile metadata">↓</button></div>
+              <div class="detail-body" id="detail-body"></div>
+            </section>
+
+            <section class="panel source-panel">
+              <div class="panel-heading compact-heading"><div><span class="panel-kicker">PROVENANCE</span><h2>Data and sources</h2></div><button class="text-button" data-view="sources">ALL SOURCES <span>↗</span></button></div>
+              <div class="source-summary">
+                <div class="source-summary-row"><span class="source-dot loaded"></span><span>Administrative boundaries</span><span class="source-label">LOADED</span></div>
+                <div class="source-summary-row"><span class="source-dot" id="source-indicator-dot"></span><span>Official indicators</span><span class="source-label" id="source-indicator-label">LOADING</span></div>
+                <p id="source-summary-note">Boundary vintage 2020 · connecting to source-linked Census and provincial indicators.</p>
+              </div>
+            </section>
+          </aside>
+        </section>
+
+        <section class="alternate-view panel" id="alternate-view" hidden></section>
+
+        <footer class="statusbar">
+          <span><i class="status-dot"></i> SYSTEM OPERATIONAL</span>
+          <span>Understand South Africa through data.</span>
+          <span class="mono">CIVICSTATS SA <b>·</b> PROTOTYPE 0.1.0</span>
+        </footer>
+      </main>
+    </div>
+    <div class="mobile-scrim" id="mobile-scrim" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

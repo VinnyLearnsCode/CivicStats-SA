@@ -1,0 +1,14 @@
+{
+  "name": "civicstats-sa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A South African civic data exploration prototype",
+  "scripts": {
+    "start": "node backend/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en-ZA">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101413">
+    <title>CivicStats SA — Municipal comparisons</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/app.css">
+    <script defer src="/js/app.js"></script>
+  </head>
+  <body class="content-page">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="brand" href="/index.html" aria-label="CivicStats SA dashboard">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="brand-copy"><strong>CIVICSTATS</strong><small>SOUTH AFRICA</small></span>
+          <span class="brand-version">SA</span>
+        </a>
+        <div class="sidebar-scroll">
+          <nav id="primary-navigation">
+            <section class="nav-group">
+              <h2>Main</h2>
+              <a class="nav-link" href="/index.html"><span class="nav-icon">⌂</span>Dashboard</a>
+              <a class="nav-link" href="/index.html"><span class="nav-icon">◎</span>National overview</a>
+              <a class="nav-link" href="/municipality-profile.html"><span class="nav-icon">▦</span>Workspace</a>
+            </section>
+            <section class="nav-group">
+              <h2>Intelligence</h2>
+              <a class="nav-link active" href="/comparisons.html"><span class="nav-icon">⇄</span>Comparisons</a>
+              <a class="nav-link" href="/reports.html"><span class="nav-icon">▧</span>Reports</a>
+            </section>
+            <section class="nav-group">
+              <h2>Data management</h2>
+              <a class="nav-link" href="/data-sources.html"><span class="nav-icon">◉</span>Data sources</a>
+            </section>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div class="topbar-left">
+            <div class="breadcrumbs" aria-label="Location breadcrumb">
+              <span>South Africa</span><span class="crumb-separator">/</span><span class="crumb-current">Comparisons</span>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <span class="data-status"><i></i> DATA STATUS <strong>COMPARISONS LOCKED</strong></span>
+          </div>
+        </header>
+
+        <section class="workspace-header profile-page-header">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span>PUBLIC DATA INTELLIGENCE</div>
+            <h1>Municipal comparisons</h1>
+            <p>Benchmarking without ranking incomplete or incompatible datasets.</p>
+          </div>
+        </section>
+
+        <section class="page-content comparison-page-layout">
+          <div class="panel full-width">
+            <div class="panel-heading compact-heading">
+              <div><span class="panel-kicker">COMPARISON ENGINE</span><h2>Gauteng comparison workspace</h2></div>
+            </div>
+            <div class="compare-controls">
+              <label>GEOGRAPHY 1
+                <select><option>City of Johannesburg</option></select>
+              </label>
+              <label>GEOGRAPHY 2
+                <select><option>City of Tshwane</option></select>
+              </label>
+              <label>GEOGRAPHY 3
+                <select><option>Ekurhuleni</option></select>
+              </label>
+            </div>
+            <div class="compare-empty">Comparison values are withheld until a compatible set of verified indicators is connected for the same reporting period and definition.</div>
+            <div class="data-table-wrap">
+              <table class="data-table compare-table">
+                <thead>
+                  <tr>
+                    <th>Indicator</th>
+                    <th>Johannesburg</th>
+                    <th>Tshwane</th>
+                    <th>Ekurhuleni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>Population</td><td>Not available</td><td>Not available</td><td>Not available</td></tr>
+                  <tr><td>Population growth</td><td>Not available</td><td>Not available</td><td>Not available</td></tr>
+                  <tr><td>Unemployment</td><td>Not available</td><td>Not available</td><td>Not available</td></tr>
+                  <tr><td>Operating revenue</td><td>Not available</td><td>Not available</td><td>Not available</td></tr>
+                  <tr><td>Operating expenditure</td><td>Not available</td><td>Not available</td><td>Not available</td></tr>
+                  <tr><td>Electricity access</td><td>Not available</td><td>Not available</td><td>Not available</td></tr>
+                  <tr><td>Water access</td><td>Not available</td><td>Not available</td><td>Not available</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

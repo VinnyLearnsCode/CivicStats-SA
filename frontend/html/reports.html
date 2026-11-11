@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en-ZA">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101413">
+    <title>CivicStats SA — Reports</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/app.css">
+    <script defer src="/js/app.js"></script>
+  </head>
+  <body class="content-page">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="brand" href="/index.html" aria-label="CivicStats SA dashboard">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="brand-copy"><strong>CIVICSTATS</strong><small>SOUTH AFRICA</small></span>
+          <span class="brand-version">SA</span>
+        </a>
+        <div class="sidebar-scroll">
+          <nav id="primary-navigation">
+            <section class="nav-group">
+              <h2>Main</h2>
+              <a class="nav-link" href="/index.html"><span class="nav-icon">⌂</span>Dashboard</a>
+              <a class="nav-link" href="/index.html"><span class="nav-icon">◎</span>National overview</a>
+            </section>
+            <section class="nav-group">
+              <h2>Intelligence</h2>
+              <a class="nav-link" href="/municipality-profile.html"><span class="nav-icon">⌖</span>Municipalities</a>
+              <a class="nav-link" href="/comparisons.html"><span class="nav-icon">⇄</span>Comparisons</a>
+              <a class="nav-link active" href="/reports.html"><span class="nav-icon">▧</span>Reports</a>
+            </section>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div class="topbar-left">
+            <div class="breadcrumbs" aria-label="Location breadcrumb">
+              <span>South Africa</span><span class="crumb-separator">/</span><span class="crumb-current">Reports</span>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <span class="data-status"><i></i> DATA STATUS <strong>REPORTS DRAFT</strong></span>
+          </div>
+        </header>
+
+        <section class="workspace-header profile-page-header">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span>PUBLIC DATA INTELLIGENCE</div>
+            <h1>Reports</h1>
+            <p>Methodology-safe public reporting for verified sources and reported periods.</p>
+          </div>
+        </section>
+
+        <section class="page-content comparison-page-layout">
+          <div class="panel full-width">
+            <div class="panel-heading compact-heading">
+              <div><span class="panel-kicker">REPORTS</span><h2>Published and draft reporting</h2></div>
+            </div>
+            <div class="source-grid">
+              <article class="source-card">
+                <header><h3>May 2026 municipal update</h3><span class="status-pill">Draft</span></header>
+                <p>Boundary-only rollout and data-quality readiness assessment for the Gauteng prototype.</p>
+              </article>
+              <article class="source-card">
+                <header><h3>CivicScore methodology note</h3><span class="status-pill">Pending</span></header>
+                <p>Framework for scoring financial management, service delivery and governance once validated input datasets are loaded.</p>
+              </article>
+              <article class="source-card">
+                <header><h3>National data readiness review</h3><span class="status-pill">Active</span></header>
+                <p>Formal review of source provenance, licence metadata, missing data and quality control guardrails.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

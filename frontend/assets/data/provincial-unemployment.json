@@ -1,0 +1,45 @@
+{
+  "source": {
+    "publisher": "Statistics South Africa",
+    "title": "Quarterly Labour Force Survey, Quarter 3: 2026",
+    "table": "Table E: Unemployment rate by province",
+    "releaseDate": "2026-11-10",
+    "sourceUrl": "https://www.statssa.gov.za/publications/P0211/P02113rdQuarter2026.pdf",
+    "page": 7,
+    "methodology": "Official unemployment rate and LU3 are Stats SA quarterly survey estimates for each province. LU3 combines unemployed people with the potential labour force. These are provincial estimates, not municipal rates."
+  },
+  "periods": [
+    { "code": "2025Q3", "label": "Q3 2025" },
+    { "code": "2026Q2", "label": "Q2 2026" },
+    { "code": "2026Q3", "label": "Q3 2026" }
+  ],
+  "records": [
+    { "province": "Western Cape", "quarter": "2025Q3", "officialRate": 19.7, "lu3Rate": 25.8 },
+    { "province": "Eastern Cape", "quarter": "2025Q3", "officialRate": 41.2, "lu3Rate": 50.2 },
+    { "province": "Northern Cape", "quarter": "2025Q3", "officialRate": 31.2, "lu3Rate": 46.5 },
+    { "province": "Free State", "quarter": "2025Q3", "officialRate": 36.2, "lu3Rate": 42.7 },
+    { "province": "KwaZulu-Natal", "quarter": "2025Q3", "officialRate": 31.7, "lu3Rate": 46.6 },
+    { "province": "North West", "quarter": "2025Q3", "officialRate": 38.1, "lu3Rate": 52.5 },
+    { "province": "Gauteng", "quarter": "2025Q3", "officialRate": 33.1, "lu3Rate": 39.6 },
+    { "province": "Mpumalanga", "quarter": "2025Q3", "officialRate": 34.0, "lu3Rate": 47.5 },
+    { "province": "Limpopo", "quarter": "2025Q3", "officialRate": 29.8, "lu3Rate": 45.1 },
+    { "province": "Western Cape", "quarter": "2026Q2", "officialRate": 19.5, "lu3Rate": 26.1 },
+    { "province": "Eastern Cape", "quarter": "2026Q2", "officialRate": 47.5, "lu3Rate": 54.1 },
+    { "province": "Northern Cape", "quarter": "2026Q2", "officialRate": 28.7, "lu3Rate": 47.1 },
+    { "province": "Free State", "quarter": "2026Q2", "officialRate": 37.3, "lu3Rate": 44.0 },
+    { "province": "KwaZulu-Natal", "quarter": "2026Q2", "officialRate": 32.5, "lu3Rate": 47.8 },
+    { "province": "North West", "quarter": "2026Q2", "officialRate": 38.1, "lu3Rate": 56.0 },
+    { "province": "Gauteng", "quarter": "2026Q2", "officialRate": 34.6, "lu3Rate": 40.5 },
+    { "province": "Mpumalanga", "quarter": "2026Q2", "officialRate": 36.6, "lu3Rate": 48.3 },
+    { "province": "Limpopo", "quarter": "2026Q2", "officialRate": 32.0, "lu3Rate": 46.7 },
+    { "province": "Western Cape", "quarter": "2026Q3", "officialRate": 19.4, "lu3Rate": 25.2 },
+    { "province": "Eastern Cape", "quarter": "2026Q3", "officialRate": 44.3, "lu3Rate": 51.8 },
+    { "province": "Northern Cape", "quarter": "2026Q3", "officialRate": 30.0, "lu3Rate": 48.1 },
+    { "province": "Free State", "quarter": "2026Q3", "officialRate": 39.1, "lu3Rate": 46.5 },
+    { "province": "KwaZulu-Natal", "quarter": "2026Q3", "officialRate": 33.3, "lu3Rate": 49.2 },
+    { "province": "North West", "quarter": "2026Q3", "officialRate": 38.1, "lu3Rate": 55.0 },
+    { "province": "Gauteng", "quarter": "2026Q3", "officialRate": 35.7, "lu3Rate": 41.0 },
+    { "province": "Mpumalanga", "quarter": "2026Q3", "officialRate": 37.8, "lu3Rate": 49.2 },
+    { "province": "Limpopo", "quarter": "2026Q3", "officialRate": 30.2, "lu3Rate": 46.1 }
+  ]
+}

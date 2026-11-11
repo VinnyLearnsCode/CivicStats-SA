@@ -1,0 +1,561 @@
+import assert from "node:assert/strict";
+import { after, before, test } from "node:test";
+import { createAppServer } from "../backend/server.js";
+
+let server;
+let baseUrl;
+
+before(async () => {
+  server = await createAppServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  baseUrl = `http://127.0.0.1:${server.address().port}`;
+});
+
+after(async () => {
+  if (server?.listening) await new Promise((resolve, reject) =>
+    server.close((error) => error ? reject(error) : resolve())
+  );
+});
+
+async function get(path, options) {
+  return fetch(`${baseUrl}${path}`, options);
+}
+
+test("health reports the bundled South African boundary feature counts", async () => {
+  const response = await get("/api/health");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    status: "ok",
+    boundaryLevels: { ADM1: 9, ADM2: 52, ADM3: 213 },
+    censusMunicipalityRecords: 213,
+    electricityMunicipalityRecords: 213,
+    provincialGdpRecords: 9,
+    electionMunicipalityRecords: 213
+  });
+});
+
+test("municipality search returns Johannesburg and a contained Gauteng hierarchy", async () => {
+  const search = await get("/api/municipalities?q=Johannesburg");
+  assert.equal(search.status, 200);
+  const result = await search.json();
+  const johannesburg = result.municipalities.find((item) => item.name === "City of Johannesburg");
+  assert.ok(johannesburg);
+  assert.equal(johannesburg.province, "Gauteng");
+  assert.equal(johannesburg.district, "City of Johannesburg");
+
+  const profile = await get(`/api/municipalities/${encodeURIComponent(johannesburg.id)}`);
+  assert.equal(profile.status, 200);
+  const body = await profile.json();
+  assert.equal(body.municipality.id, johannesburg.id);
+  assert.ok(Number.isFinite(body.municipality.areaKm2));
+  assert.ok(body.municipality.areaKm2 > 0);
+  assert.match(body.municipality.areaMethod, /Approximate spherical area/);
+  assert.deepEqual(body.indicators, []);
+  assert.match(body.availability, /Census 2022/);
+});
+
+test("local and district municipalities and source provenance are available", async () => {
+  const results = await get("/api/municipalities");
+  const municipalityBody = await results.json();
+  assert.equal(municipalityBody.total, 213);
+  assert.ok(municipalityBody.municipalities.some((item) => item.name === "Mogalakwena"));
+
+  const sourcesResponse = await get("/api/sources");
+  const { sources } = await sourcesResponse.json();
+  const boundarySource = sources.find((source) => source.id === "geoboundaries");
+  assert.equal(boundarySource.status, "loaded");
+  assert.match(boundarySource.license, /CC BY/);
+  assert.equal(sources.find((source) => source.id === "treasury").status, "live-api");
+  assert.equal(sources.find((source) => source.id === "agsa").status, "via-treasury");
+  assert.equal(sources.find((source) => source.id === "stats-sa").status, "loaded");
+  assert.match(sources.find((source) => source.id === "stats-sa").detail, /213 municipalities/);
+  assert.equal(sources.find((source) => source.id === "stats-sa-electricity").status, "loaded");
+  assert.match(sources.find((source) => source.id === "stats-sa-electricity").detail, /main source for lighting/);
+  assert.equal(sources.find((source) => source.id === "stats-sa-gdp-r").status, "loaded");
+  assert.match(sources.find((source) => source.id === "stats-sa-gdp-r").detail, /2014–2024/);
+  assert.equal(sources.find((source) => source.id === "stats-sa-qlfs").status, "loaded");
+  assert.match(sources.find((source) => source.id === "stats-sa-qlfs").detail, /Q3 2026/);
+  assert.equal(sources.find((source) => source.id === "iec-council-2021").status, "loaded");
+  assert.match(sources.find((source) => source.id === "iec-council-2021").detail, /all 213/);
+  assert.equal(sources.find((source) => source.id === "iec-current-elections").status, "portal-only");
+  assert.match(sources.find((source) => source.id === "iec-current-elections").detail, /does not yet import/);
+  assert.equal(sources.find((source) => source.id === "iec-current-ward-councillors").status, "portal-only");
+  assert.match(sources.find((source) => source.id === "iec-current-ward-councillors").detail, /full municipal council/);
+  assert.equal(sources.find((source) => source.id === "nasa-power").status, "live-api");
+  assert.equal(sources.find((source) => source.id === "world-bank-wdi").status, "live-api");
+  assert.match(sources.find((source) => source.id === "treasury").detail, /financial position/);
+});
+
+test("IEC 2021 party seat counts cover all municipalities and keep ward and PR seats distinct", async () => {
+  const { municipalities } = await get("/api/municipalities").then((response) => response.json());
+  const records = [];
+  for (const municipality of municipalities) {
+    const response = await get(`/api/municipalities/${encodeURIComponent(municipality.id)}/politics`);
+    assert.equal(response.status, 200, municipality.name);
+    const result = await response.json();
+    assert.equal(result.municipality.id, municipality.id);
+    assert.equal(result.election.year, 2021);
+    assert.equal(result.election.publishedDate, "2021-11-20");
+    assert.equal(result.election.source.publisher, "Electoral Commission of South Africa");
+    assert.equal(result.latestElection.year, 2026);
+    assert.match(result.latestElection.update, /revote/);
+    assert.equal(result.election.parties.reduce((total, party) => total + party.totalSeats, 0), result.election.totalSeats);
+    assert.equal(result.election.parties.every((party) =>
+      party.totalSeats === party.wardSeats + party.proportionalRepresentationSeats
+    ), true);
+    records.push(result.election);
+  }
+  assert.equal(records.length, 213);
+
+  const johannesburg = records.find((record) => record.municipalityCode === "JHB");
+  assert.equal(johannesburg.totalSeats, 270);
+  assert.equal(johannesburg.parties.find((party) => party.name === "AFRICAN NATIONAL CONGRESS").totalSeats, 91);
+  assert.equal(johannesburg.parties.find((party) => party.name === "DEMOCRATIC ALLIANCE").totalSeats, 71);
+
+  const mogalakwena = records.find((record) => record.municipalityCode === "LIM367");
+  assert.equal(mogalakwena.totalSeats, 64);
+  assert.equal(mogalakwena.parties.find((party) => party.name === "AFRICAN NATIONAL CONGRESS").totalSeats, 42);
+  assert.equal(records.every((record) => record.parties.every((party) =>
+    !Object.hasOwn(party, "nameOfCouncillor") && !Object.hasOwn(party, "idNumber")
+  )), true);
+});
+
+test("Census 2011 and 2022 records are available for every municipality", async () => {
+  const municipalitiesResponse = await get("/api/municipalities");
+  const { municipalities } = await municipalitiesResponse.json();
+  const missing = [];
+
+  for (const municipality of municipalities) {
+    const response = await get(`/api/municipalities/${encodeURIComponent(municipality.id)}/census`);
+    assert.equal(response.status, 200, municipality.name);
+    const body = await response.json();
+    if (!body.census) {
+      missing.push(municipality.name);
+      continue;
+    }
+    assert.equal(body.census.indicators.prov_code.length > 0, true, municipality.name);
+    assert.equal(body.source.publisher, "Statistics South Africa", municipality.name);
+    assert.deepEqual(body.source.reportingPeriods, [2011, 2022], municipality.name);
+  }
+
+  assert.deepEqual(missing, [], `Census records were not mapped: ${missing.join(", ")}`);
+});
+
+test("Census profile returns source-linked population, age and household indicators", async () => {
+  const search = await get("/api/municipalities?q=Mogalakwena");
+  const { municipalities } = await search.json();
+  const mogalakwena = municipalities.find((item) => item.name === "Mogalakwena");
+  const response = await get(`/api/municipalities/${encodeURIComponent(mogalakwena.id)}/census`);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.census.officialCode, "LIM367");
+  assert.equal(result.census.indicators.total_pop_2011, 304585);
+  assert.equal(result.census.indicators.total_pop_2022, 378198);
+  assert.equal(result.census.indicators.households_2022, 109294);
+  assert.equal(result.census.indicators.age_15_to_34_2022, 121925);
+  assert.equal(result.census.indicators.water_scheme_2022, 65373);
+  assert.equal(result.electricity.indicators.electricityLightingSharePercent2011, 91.8);
+  assert.equal(result.electricity.indicators.electricityLightingSharePercent2022, 97.2);
+  assert.equal(result.electricity.source.publisher, "Statistics South Africa");
+  assert.match(result.electricity.source.url, /Census_2022_Municipal_factsheet-Web\.pdf/);
+  assert.equal(result.source.title, "Census 2022: Provinces at a Glance");
+  assert.match(result.source.url, /Provinces_at_a_Glance\.pdf/);
+
+  const sourceCsv = await get("/assets/data/person-indicators-muni.csv");
+  assert.equal(sourceCsv.status, 200);
+  assert.match(sourceCsv.headers.get("content-type"), /text\/csv/);
+});
+
+test("Census map layers return complete 2011 and 2022 municipal measures with explicit methods", async () => {
+  for (const year of [2011, 2022]) {
+    const response = await get(`/api/census/municipalities?year=${year}`);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.year, year);
+    assert.equal(result.total, 213);
+    assert.equal(result.records.length, 213);
+    assert.equal(result.records.every((record) => record.year === year), true);
+    assert.match(result.methodology, /Population density is calculated/);
+    assert.match(result.sourceUrl, /Provinces_at_a_Glance\.pdf/);
+    assert.equal(result.electricitySource.publisher, "Statistics South Africa");
+    assert.match(result.electricitySource.url, /Census_2022_Municipal_factsheet-Web\.pdf/);
+    assert.equal(result.records.every((record) =>
+      Number.isFinite(record.electricityLightingSharePercent) &&
+      record.electricityLightingSharePercent >= 0 &&
+      record.electricityLightingSharePercent <= 100
+    ), true);
+
+    const mogalakwena = result.records.find((record) => record.censusCode === "LIM367");
+    const censusResponse = await get("/api/municipalities/" + encodeURIComponent(mogalakwena.id) + "/census");
+    const census = await censusResponse.json();
+    assert.equal(mogalakwena.population, census.census.indicators[`total_pop_${year}`]);
+    assert.equal(mogalakwena.households, census.census.indicators[`households_${year}`]);
+    assert.equal(mogalakwena.populationDensityPerKm2, Number((mogalakwena.population / mogalakwena.sourceAreaKm2).toFixed(2)));
+    assert.equal(mogalakwena.waterSchemeSharePercent, Number(((mogalakwena.waterSchemeHouseholds / mogalakwena.households) * 100).toFixed(2)));
+  }
+});
+
+test("Census electricity-for-lighting map data covers all municipalities at the source reporting years", async () => {
+  const expected = new Map([
+    ["LIM367", [91.8, 97.2]],
+    ["JHB", [90.8, 94.1]],
+    ["EKU", [82.2, 93.1]],
+    ["TSH", [88.6, 91.8]]
+  ]);
+  for (const [index, year] of [2011, 2022].entries()) {
+    const response = await get(`/api/census/municipalities?year=${year}`);
+    assert.equal(response.status, 200);
+    const { records } = await response.json();
+    assert.equal(records.length, 213);
+    for (const [code, values] of expected) {
+      assert.equal(records.find((record) => record.censusCode === code)?.electricityLightingSharePercent, values[index]);
+    }
+  }
+});
+
+test("Stats SA provincial GDP-R returns nine provinces, source-linked activity and valid years", async () => {
+  for (const year of [2014, 2024]) {
+    const response = await get(`/api/economy/provinces?year=${year}`);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.year, year);
+    assert.deepEqual(result.availableYears, [2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]);
+    assert.equal(result.records.length, 9);
+    assert.equal(result.source.publisher, "Statistics South Africa");
+    assert.equal(result.source.reportNumber, "P0441.2");
+    assert.match(result.source.url, /P044122024\.pdf/);
+    assert.equal(result.records.every((record) =>
+      Number.isFinite(record.gdpCurrentPricesRandMillions) &&
+      Number.isFinite(record.gdpContributionPercent) &&
+      Number.isFinite(record.realGdpGrowthPercent) &&
+      record.industries.length === 10 &&
+      record.industries.every((industry) => Number.isFinite(industry.gvaCurrentPricesRandMillions))
+    ), true);
+  }
+  const latest = await (await get("/api/economy/provinces?year=2024")).json();
+  const gauteng = latest.records.find((record) => record.province === "Gauteng");
+  assert.equal(gauteng.gdpCurrentPricesRandMillions, 2442020);
+  assert.equal(gauteng.gdpContributionPercent, 33.2);
+  assert.equal(latest.national.gdpCurrentPricesRandMillions, 7352449);
+});
+
+test("provincial GDP-R endpoint rejects unsupported and malformed years", async () => {
+  for (const year of ["2013", "2025", "2024abc", "2014.5"]) {
+    const response = await get(`/api/economy/provinces?year=${year}`);
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /GDP-R reporting year/);
+  }
+});
+
+test("Census map layers reject unsupported or malformed reporting periods", async () => {
+  for (const year of ["2001", "2022abc", "2011.5"]) {
+    const response = await get(`/api/census/municipalities?year=${year}`);
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /2011 or 2022/);
+  }
+});
+
+test("unknown geography, unsupported methods and missing static files return explicit errors", async () => {
+  assert.equal((await get("/api/geo/ADM9")).status, 404);
+  assert.equal((await get("/api/municipalities/%E0%A4%A")).status, 400);
+  assert.equal((await get("/not-a-file.js")).status, 404);
+  const post = await get("/api/health", { method: "POST" });
+  assert.equal(post.status, 405);
+  assert.equal(post.headers.get("allow"), "GET");
+});
+
+test("the browser application is served with security headers", async () => {
+  const response = await get("/");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/html/);
+  assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.match(await response.text(), /National geographic explorer/);
+});
+
+test("the stylesheet, browser application and bundled source catalogue are served", async () => {
+  const [stylesheet, application, sourceCatalogue] = await Promise.all([
+    get("/css/app.css"),
+    get("/js/app.js"),
+    get("/assets/data-sources.json")
+  ]);
+  assert.equal(stylesheet.status, 200);
+  assert.match(stylesheet.headers.get("content-type"), /text\/css/);
+  assert.equal(application.status, 200);
+  assert.match(application.headers.get("content-type"), /javascript/);
+  assert.equal(sourceCatalogue.status, 200);
+  const sources = await sourceCatalogue.json();
+  assert.ok(sources.some((source) => source.id === "geoboundaries"));
+});
+
+test("live provider routes return source-linked finance, audit and publication records", async () => {
+  const treasuryMunicipality = {
+    "municipality.demarcation_code": "LIM367",
+    "municipality.name": "Mogalakwena",
+    "municipality.province_name": "Limpopo",
+    "municipality.url": "https://www.mogalakwena.gov.za/"
+  };
+  const financeRow = {
+    "demarcation.code": "LIM367",
+    "demarcation.label": "Mogalakwena",
+    "financial_year_end.year": 2024,
+    "function.code": "1110",
+    "function.label": "Mayor and Council",
+    "item.code": "1600",
+    "item.label": "Operational Revenue",
+    "amount_type.code": "AUDA",
+    "amount_type.label": "Audited",
+    "amount.sum": 123456
+  };
+  const auditRow = {
+    "demarcation.code": "LIM367",
+    "demarcation.label": "Mogalakwena",
+    "financial_year_end.year": 2024,
+    "opinion.label": "Unqualified",
+    "opinion.report_url": "http://mfma.treasury.gov.za/reports/2024.pdf"
+  };
+  const treasurySupplementRows = {
+    financial_position_v2: [{
+      "item.label": "Cash and cash equivalents",
+      "amount_type.code": "AUDA",
+      "amount_type.label": "Audited Actual",
+      "amount.sum": 500000
+    }],
+    capital_v2: [{
+      "demarcation.code": "LIM367",
+      "demarcation.label": "Mogalakwena",
+      "financial_year_end.year": 2024,
+      "function.code": "3210",
+      "function.label": "Water Management",
+      "item.code": "8010",
+      "item.label": "Water infrastructure",
+      "capital_type.code": "NEW",
+      "capital_type.label": "New assets",
+      "amount_type.code": "AUDA",
+      "amount_type.label": "Audited Actual",
+      "amount.sum": 250000
+    }],
+    grants_v2: [{
+      "grant.label": "Equitable Share",
+      "amount_type.code": "AUDA",
+      "amount_type.label": "Audited Actual",
+      "amount.sum": 75000
+    }],
+    repmaint_v2: [{
+      "item.label": "Repairs and maintenance",
+      "amount_type.code": "AUDA",
+      "amount_type.label": "Audited Actual",
+      "amount.sum": 12000
+    }]
+  };
+  const climateResponse = {
+    properties: {
+      parameter: {
+        T2M: { JAN: 20, FEB: 21, MAR: 22, APR: 23, MAY: 24, JUN: 25, JUL: 26, AUG: 25, SEP: 24, OCT: 23, NOV: 22, DEC: 21, ANN: 23 },
+        PRECTOTCORR: { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 6, SEP: 5, OCT: 4, NOV: 3, DEC: 2, ANN: 4 }
+      }
+    },
+    header: { sources: ["MERRA2"], range: "25-year climatology, January 2001 - December 2025" },
+    parameters: { T2M: { units: "C" }, PRECTOTCORR: { units: "mm/day" } }
+  };
+  const fakeFetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname === "/api/cubes") {
+      return Response.json({ status: "ok", data: [{ name: "incexp_v2" }, { name: "audit_opinions" }] });
+    }
+    if (url.pathname.endsWith("/members/municipality")) {
+      return Response.json({ status: "ok", data: [treasuryMunicipality] });
+    }
+    if (url.pathname.endsWith("/incexp_v2/aggregate")) {
+      return Response.json({ status: "ok", total_cell_count: 1, cells: [financeRow] });
+    }
+    for (const [cube, rows] of Object.entries(treasurySupplementRows)) {
+      if (url.pathname.endsWith(`/${cube}/aggregate`)) {
+        return Response.json({ status: "ok", total_cell_count: rows.length, cells: rows });
+      }
+    }
+    if (url.pathname.endsWith("/uifwexp/facts")) {
+      return Response.json({
+        status: "ok",
+        total_fact_count: 1,
+        data: [{ "demarcation.code": "LIM367", "financial_year_end.year": 2024, "item.label": "Irregular expenditure", amount: 3000 }]
+      });
+    }
+    if (url.pathname.endsWith("/audit_opinions/facts")) {
+      return Response.json({ status: "ok", data: [auditRow] });
+    }
+    if (url.hostname === "power.larc.nasa.gov") return Response.json(climateResponse);
+    if (url.hostname === "api.worldbank.org") {
+      const code = url.pathname.split("/").at(-1);
+      const values = {
+        "NY.GDP.MKTP.CD": [{ date: "2024", value: 401144998373.585 }, { date: "2025", value: 427184325997.307 }],
+        "NY.GDP.MKTP.KD.ZG": [{ date: "2024", value: 0.5 }],
+        "NV.AGR.TOTL.ZS": [{ date: "2024", value: 2.5 }],
+        "NV.IND.TOTL.ZS": [{ date: "2024", value: 24.2 }],
+        "NV.SRV.TOTL.ZS": [{ date: "2024", value: 63.1 }]
+      };
+      return Response.json([{ page: 1, total: 1 }, values[code] ?? []]);
+    }
+    if (url.pathname.endsWith("/wp/v2/posts")) {
+      return Response.json([{
+        id: 8,
+        date: "2025-01-15T08:30:00",
+        link: "https://sacities.net/publication/example/",
+        title: { rendered: "<p>Example publication</p>" },
+        excerpt: { rendered: "<p>Original publisher summary</p>" }
+      }]);
+    }
+    throw new Error(`Unexpected provider URL: ${url}`);
+  };
+  const providerServer = await createAppServer({ fetchImpl: fakeFetch });
+  await new Promise((resolve) => providerServer.listen(0, "127.0.0.1", resolve));
+  const providerUrl = `http://127.0.0.1:${providerServer.address().port}`;
+  try {
+    const municipalities = await fetch(`${providerUrl}/api/municipalities?q=Mogalakwena`).then((response) => response.json());
+    const mogalakwena = municipalities.municipalities.find((item) => item.name === "Mogalakwena");
+    const [financeResponse, auditResponse, projectsResponse, documentsResponse, publicationsResponse, integrationsResponse, climateFetchResponse, economyResponse] = await Promise.all([
+      fetch(`${providerUrl}/api/municipalities/${encodeURIComponent(mogalakwena.id)}/finance?year=2024`),
+      fetch(`${providerUrl}/api/municipalities/${encodeURIComponent(mogalakwena.id)}/audit?year=2024`),
+      fetch(`${providerUrl}/api/municipalities/${encodeURIComponent(mogalakwena.id)}/projects?year=2024`),
+      fetch(`${providerUrl}/api/municipalities/${encodeURIComponent(mogalakwena.id)}/documents`),
+      fetch(`${providerUrl}/api/publications/sacn?limit=1`),
+      fetch(`${providerUrl}/api/integrations`),
+      fetch(`${providerUrl}/api/geographies/ADM3/${encodeURIComponent(mogalakwena.id)}/climate`),
+      fetch(`${providerUrl}/api/economy/national`)
+    ]);
+    assert.equal(financeResponse.status, 200);
+    const finance = await financeResponse.json();
+    assert.deepEqual(finance.rows, [financeRow]);
+    assert.deepEqual(finance.supplemental.financialPosition.rows, treasurySupplementRows.financial_position_v2);
+    assert.deepEqual(finance.supplemental.capital.rows, treasurySupplementRows.capital_v2);
+    assert.deepEqual(finance.supplemental.grants.rows, treasurySupplementRows.grants_v2);
+    assert.deepEqual(finance.supplemental.repairsMaintenance.rows, treasurySupplementRows.repmaint_v2);
+    assert.equal(finance.supplemental.uifw.rows[0].amount, 3000);
+    assert.equal(auditResponse.status, 200);
+    assert.equal((await auditResponse.json()).rows[0].opinion, "Unqualified");
+    assert.equal(projectsResponse.status, 200);
+    const projects = await projectsResponse.json();
+    assert.equal(projects.year, 2024);
+    assert.equal(projects.treasuryMunicipality.code, "LIM367");
+    assert.equal(projects.rows.length, 1);
+    assert.equal(projects.rows[0]["amount.sum"], 250000);
+    assert.match(projects.source.note, /do not identify individual project names/);
+    assert.match(projects.source.apiUrl, /capital_v2\/aggregate/);
+    assert.equal(documentsResponse.status, 200);
+    const documents = await documentsResponse.json();
+    assert.equal(documents.officialMunicipalWebsite, "https://www.mogalakwena.gov.za/");
+    assert.equal(documents.auditRecords[0].year, 2024);
+    assert.equal(documents.auditRecords[0].opinion, "Unqualified");
+    assert.equal(documents.auditRecords[0].reportUrl, "http://mfma.treasury.gov.za/reports/2024.pdf");
+    assert.equal(publicationsResponse.status, 200);
+    const publications = await publicationsResponse.json();
+    assert.equal(publications.publications[0].title, "Example publication");
+    assert.equal(publications.publications[0].summary, "Original publisher summary");
+    assert.equal(climateFetchResponse.status, 200);
+    const climate = await climateFetchResponse.json();
+    assert.equal(climate.geography.name, "Mogalakwena");
+    assert.equal(climate.geography.level, "ADM3");
+    assert.equal(climate.monthly.length, 12);
+    assert.equal(climate.annual.temperatureC, 23);
+    assert.equal(climate.annual.precipitationMmPerDay, 4);
+    assert.equal(climate.source.publisher, "NASA Langley Research Center · POWER");
+    assert.match(climate.source.period, /January 2001/);
+    assert.equal(economyResponse.status, 200);
+    const economy = await economyResponse.json();
+    assert.equal(economy.country, "South Africa");
+    assert.equal(economy.geographyLevel, "National");
+    assert.equal(economy.indicators.length, 5);
+    assert.equal(economy.indicators.find((indicator) => indicator.key === "gdpCurrentUsd").values.at(-1).value, 427184325997.307);
+    assert.equal(economy.indicators.find((indicator) => indicator.key === "servicesShare").values[0].value, 63.1);
+    assert.match(economy.source.note, /not provincial or municipal/);
+    assert.equal(integrationsResponse.status, 200);
+    const { integrations } = await integrationsResponse.json();
+    assert.equal(integrations.find((source) => source.id === "treasury").status, "connected");
+    assert.equal(integrations.find((source) => source.id === "agsa").status, "connected-via-treasury");
+    assert.equal(integrations.find((source) => source.id === "sacn").status, "connected");
+    assert.equal(integrations.find((source) => source.id === "stats-sa").status, "loaded");
+    assert.equal(integrations.find((source) => source.id === "stats-sa-qlfs").status, "loaded");
+    assert.equal(integrations.find((source) => source.id === "nasa-power").status, "connected");
+    assert.equal(integrations.find((source) => source.id === "world-bank-wdi").status, "connected");
+  } finally {
+    await new Promise((resolve, reject) =>
+      providerServer.close((error) => error ? reject(error) : resolve())
+    );
+  }
+});
+
+test("capital acquisition rejects invalid years and non-municipality references", async () => {
+  const { municipalities } = await get("/api/municipalities").then((response) => response.json());
+  const johannesburg = municipalities.find((item) => item.name === "City of Johannesburg");
+  const invalidYear = await get(`/api/municipalities/${encodeURIComponent(johannesburg.id)}/projects?year=2018`);
+  assert.equal(invalidYear.status, 400);
+  assert.match((await invalidYear.json()).error, /2019 through the current year/);
+
+  const provinces = await get("/api/geo/ADM1").then((response) => response.json());
+  const provinceId = provinces.features[0].properties.shapeID;
+  const wrongLevel = await get(`/api/municipalities/${encodeURIComponent(provinceId)}/projects?year=2024`);
+  assert.equal(wrongLevel.status, 404);
+  assert.match((await wrongLevel.json()).error, /Municipality not found/);
+});
+
+test("provincial unemployment API returns complete source-linked Stats SA QLFS periods", async () => {
+  const response = await get("/api/labour/provinces");
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.totalProvinces, 9);
+  assert.equal(result.periods.at(-1).code, "2026Q3");
+  assert.equal(result.records.length, 27);
+  assert.equal(result.source.publisher, "Statistics South Africa");
+  assert.equal(result.source.title, "Quarterly Labour Force Survey, Quarter 3: 2026");
+  assert.equal(result.source.releaseDate, "2026-11-10");
+  assert.match(result.source.sourceUrl, /P02113rdQuarter2026\.pdf/);
+
+  const latest = result.records.filter((record) => record.quarter === "2026Q3");
+  assert.equal(latest.length, 9);
+  assert.equal(latest.find((record) => record.province === "Eastern Cape").officialRate, 44.3);
+  assert.equal(latest.find((record) => record.province === "Eastern Cape").lu3Rate, 51.8);
+  assert.equal(latest.find((record) => record.province === "Western Cape").officialRate, 19.4);
+  assert.ok(latest.every((record) =>
+    Number.isFinite(record.officialRate) && Number.isFinite(record.lu3Rate)
+  ));
+});
+
+test("provider failures are reported without substituting successful-looking data", async () => {
+  const providerServer = await createAppServer({
+    fetchImpl: async () => { throw new Error("provider offline"); }
+  });
+  await new Promise((resolve) => providerServer.listen(0, "127.0.0.1", resolve));
+  const providerUrl = `http://127.0.0.1:${providerServer.address().port}`;
+  try {
+    const municipalities = await fetch(`${providerUrl}/api/municipalities?q=Mogalakwena`).then((response) => response.json());
+    const mogalakwena = municipalities.municipalities.find((item) => item.name === "Mogalakwena");
+    const response = await fetch(`${providerUrl}/api/municipalities/${encodeURIComponent(mogalakwena.id)}/finance?year=2024`);
+    assert.equal(response.status, 502);
+    const body = await response.json();
+    assert.equal(body.code, "PROVIDER_UNAVAILABLE");
+    assert.match(body.error, /provider offline/);
+    assert.equal(body.rows, undefined);
+    const economyResponse = await fetch(`${providerUrl}/api/economy/national`);
+    assert.equal(economyResponse.status, 502);
+    assert.equal((await economyResponse.json()).code, "PROVIDER_UNAVAILABLE");
+  } finally {
+    await new Promise((resolve, reject) =>
+      providerServer.close((error) => error ? reject(error) : resolve())
+    );
+  }
+});
+
+test("Live Server CORS is restricted to the configured local origin", async () => {
+  const allowed = await get("/api/integrations", {
+    method: "OPTIONS",
+    headers: { origin: "http://127.0.0.1:5500" }
+  });
+  assert.equal(allowed.status, 204);
+  assert.equal(allowed.headers.get("access-control-allow-origin"), "http://127.0.0.1:5500");
+
+  const denied = await get("/api/integrations", {
+    method: "OPTIONS",
+    headers: { origin: "https://example.com" }
+  });
+  assert.equal(denied.status, 204);
+  assert.equal(denied.headers.get("access-control-allow-origin"), null);
+});

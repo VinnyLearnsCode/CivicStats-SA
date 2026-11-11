@@ -1,0 +1,146 @@
+[
+  {
+    "id": "geoboundaries",
+    "name": "geoBoundaries · South Africa",
+    "publisher": "OCHA ROSEA / South African Municipal Demarcation Board",
+    "url": "https://www.geoboundaries.org/",
+    "license": "CC BY 3.0 IGO",
+    "status": "loaded",
+    "detail": "ADM1, ADM2 and ADM3 boundary files; boundary year represented: 2020."
+  },
+  {
+    "id": "stats-sa",
+    "name": "Statistics South Africa",
+    "publisher": "Statistics South Africa",
+    "url": "https://www.statssa.gov.za/",
+    "license": "Stats SA requires attribution; reprocessed data may not be sold without prior permission.",
+    "portalUrl": "https://census.statssa.gov.za/",
+    "dataUrl": "https://census.statssa.gov.za/assets/documents/2022/Provinces_at_a_Glance.pdf",
+    "datasetUrl": "https://github.com/afrith/census-2022-muni-stats/tree/main",
+    "status": "loaded",
+    "detail": "Bundled Census 2022 municipal extract for all 213 municipalities: population, age, households, dwelling types, water, sanitation and cooking-energy counts. Employment-status, unemployment-rate and industry tables are not included in this extract. Source publication: Stats SA, Census 2022: Provinces at a Glance, released 10 October 2023."
+  },
+  {
+    "id": "stats-sa-electricity",
+    "name": "Statistics South Africa · Municipal electricity for lighting",
+    "publisher": "Statistics South Africa",
+    "url": "https://www.statssa.gov.za/",
+    "license": "Stats SA requires attribution; reprocessed data may not be sold without prior permission.",
+    "portalUrl": "https://census.statssa.gov.za/",
+    "dataUrl": "https://census.statssa.gov.za/assets/documents/2022/Census_2022_Municipal_factsheet-Web.pdf",
+    "datasetUrl": "../assets/data/electricity-lighting-muni.csv",
+    "status": "loaded",
+    "detail": "Census municipal fact-sheet values for 2011 and 2022: share of households reporting electricity as their main source for lighting, matched to all 213 municipalities. This is not a measure of grid connection, electricity availability or service reliability."
+  },
+  {
+    "id": "stats-sa-gdp-r",
+    "name": "Statistics South Africa · Provincial GDP-R",
+    "publisher": "Statistics South Africa",
+    "url": "https://www.statssa.gov.za/",
+    "license": "Stats SA requires attribution; reprocessed data may not be sold without prior permission.",
+    "portalUrl": "https://www.statssa.gov.za/?page_id=1854&PPN=P0441.2",
+    "dataUrl": "https://www.statssa.gov.za/publications/P04412/P044122024.pdf",
+    "datasetUrl": "../assets/data/provincial-gdp-r.json",
+    "status": "loaded",
+    "detail": "P0441.2 provincial gross domestic product, contributions, real growth and industry activity for 2014–2024. Current-price values are nominal R million. This source is province-level; municipal GDP is not inferred."
+  },
+  {
+    "id": "stats-sa-qlfs",
+    "name": "Statistics South Africa · Quarterly Labour Force Survey",
+    "publisher": "Statistics South Africa",
+    "url": "https://www.statssa.gov.za/",
+    "license": "See original publication",
+    "dataUrl": "https://www.statssa.gov.za/publications/P0211/P02113rdQuarter2026.pdf",
+    "status": "loaded",
+    "detail": "Official unemployment rate and LU3 estimates for all nine provinces, for Q3 2025, Q2 2026 and Q3 2026. Source: QLFS Q3 2026, Table E, released 10 November 2026. Rates are province-level survey estimates, not municipality-level values."
+  },
+  {
+    "id": "iec-council-2021",
+    "name": "Electoral Commission of South Africa · 2021 councillors",
+    "publisher": "Electoral Commission of South Africa",
+    "url": "https://www.elections.org.za/pw/Documents/LGE2021_Councillors_20_Nov_2021.pdf",
+    "license": "See IEC copyright notice and disclaimer",
+    "datasetUrl": "../assets/data/municipal-councillors-2021.json",
+    "status": "loaded",
+    "detail": "Historical party seat counts aggregated from the IEC elected-councillor list published 20 November 2021, covering all 213 local and metropolitan municipalities. Ward and PR seats are separate; names and identifiers are not retained. Not current council membership after subsequent changes or the 2026 election."
+  },
+  {
+    "id": "iec-current-elections",
+    "name": "Electoral Commission of South Africa · 2026 election results",
+    "publisher": "Electoral Commission of South Africa",
+    "url": "https://results.elections.org.za/home/Downloads/ME-Results",
+    "license": "See IEC copyright notice and disclaimer",
+    "status": "portal-only",
+    "detail": "Official 2026 Local Government Elections reports and seat-calculation downloads are available through the IEC results portal. This application does not yet import a verified 2026 municipal seat dataset. IEC results were declared 9 November 2026; a revote was ordered for one Siyancuma voting district on 10 November 2026."
+  },
+  {
+    "id": "iec-current-ward-councillors",
+    "name": "Electoral Commission of South Africa · current ward councillors",
+    "publisher": "Electoral Commission of South Africa",
+    "url": "https://www.elections.org.za/pw/StatsData/List-Of-Current-Ward-Councillors",
+    "license": "See IEC copyright notice and disclaimer",
+    "status": "portal-only",
+    "detail": "IEC's live ward-councillor lookup lists ward representatives and party affiliations. It does not represent the full municipal council, including PR councillors."
+  },
+  {
+    "id": "nasa-power",
+    "name": "NASA POWER · Climate",
+    "publisher": "NASA Langley Research Center",
+    "url": "https://power.larc.nasa.gov/",
+    "license": "NASA POWER data access and attribution terms",
+    "apiUrl": "https://power.larc.nasa.gov/api/temporal/climatology/point",
+    "status": "live-api",
+    "detail": "Monthly mean 2 m temperature and corrected precipitation climatology for the API's reported 25-year period (currently January 2001–December 2025), queried at a representative point within the selected geography. Gridded point values are not municipal area averages or station observations."
+  },
+  {
+    "id": "world-bank-wdi",
+    "name": "World Bank · World Development Indicators",
+    "publisher": "World Bank",
+    "url": "https://data.worldbank.org/country/south-africa",
+    "license": "World Bank open data terms",
+    "apiUrl": "https://api.worldbank.org/v2/country/ZAF/indicator",
+    "status": "live-api",
+    "detail": "National South Africa GDP in current US dollars, real GDP growth, and agriculture, industry and services value-added shares. These World Development Indicators are country-level measures, not provincial or municipal economic output."
+  },
+  {
+    "id": "treasury",
+    "name": "National Treasury · Municipal Finance",
+    "publisher": "National Treasury",
+    "url": "https://municipaldata.treasury.gov.za/",
+    "license": "See original publication",
+    "apiUrl": "https://municipaldata.treasury.gov.za/api/cubes",
+    "portalUrl": "https://municipaldata.treasury.gov.za/docs",
+    "status": "live-api",
+    "detail": "Live Municipal Money API: income and expenditure, financial position, capital acquisition, grants, repairs and maintenance, UIFW expenditure, and audit-opinion records. Capital Acquisition (v2) provides Section 71 mSCOA expenditure categories, not a named project register. Audit opinions link available reports; the Treasury municipality directory provides official municipal website links. Amounts are reported in South African rand."
+  },
+  {
+    "id": "agsa",
+    "name": "Auditor-General South Africa",
+    "publisher": "Auditor-General South Africa",
+    "url": "https://www.agsa.co.za/",
+    "license": "See original publication",
+    "apiUrl": "https://municipaldata.treasury.gov.za/api/cubes/audit_opinions",
+    "status": "via-treasury",
+    "detail": "Municipal audit opinions and report links are published through National Treasury's Municipal Money API; AGSA report archive is linked as the publisher."
+  },
+  {
+    "id": "salga",
+    "name": "South African Local Government Association",
+    "publisher": "SALGA",
+    "url": "https://www.salga.org.za/",
+    "license": "See original publication",
+    "portalUrl": "https://www.salga.org.za/knowledge-hub/documentations-publications",
+    "status": "portal-only",
+    "detail": "Official publications library and knowledge hub. No public machine-readable dataset API was verified."
+  },
+  {
+    "id": "sacn",
+    "name": "South African Cities Network",
+    "publisher": "South African Cities Network",
+    "url": "https://sacities.net/",
+    "license": "See original publication",
+    "apiUrl": "https://sacities.net/wp-json/wp/v2/posts",
+    "status": "live-api",
+    "detail": "Live public publications feed from the South African Cities Network."
+  }
+]
