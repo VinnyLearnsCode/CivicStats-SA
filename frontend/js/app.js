@@ -72,6 +72,7 @@ let provinceCensus2022Promise = null;
 
 const indicatorGuideEntries = [
   { name: "Population", category: "Demographics", definition: "The number of people counted for a municipality in the relevant Census. It is a count, not a current population estimate.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "Census figures describe their census dates; they are not updated between censuses." },
+  { name: "Basic services pilot score", category: "Municipal services", definition: "An equal-weighted arithmetic mean of three Census 2022 household shares: reporting a water-scheme source, a flush toilet, and electricity as the main lighting source. All three verified source values are required.", period: "Census 2022", source: "Statistics South Africa · municipal Census profile and electricity lighting fact sheet", caveat: "Equal weights are a transparent pilot choice. This describes 2022 household reports, not current service quality, continuity, council responsibility or overall municipal performance." },
   { name: "Households", category: "Demographics", definition: "The Census count of households in the municipality. Household totals are separate from the population count.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "Do not compare a household count with a population count as if they were the same unit." },
   { name: "Average household size", category: "Demographics", definition: "The average number of people per household in the source period.", period: "Census 2022", source: "Statistics South Africa · Census", caveat: "An average can hide differences between households and neighbourhoods." },
   { name: "Sex ratio", category: "Demographics", definition: "The sex-ratio value reported in the source Census table for this area and year.", period: "Census 2011 and 2022 where supplied", source: "Statistics South Africa · Census", caveat: "This is a source-reported ratio; consult the original table for its exact denominator and method." },
@@ -1074,11 +1075,6 @@ function renderDetail() {
   empty.append(title, description, source);
   detailBody.append(empty);
 
-  const civicScore = document.createElement("div");
-  civicScore.className = "detail-item";
-  civicScore.style.marginTop = "10px";
-  civicScore.innerHTML = "<span>CIVICSCORE</span><strong>Not scored · insufficient data</strong>";
-  detailBody.append(civicScore);
 }
 
 function formatCensusNumber(value, maximumFractionDigits = 0) {
@@ -1088,7 +1084,9 @@ function formatCensusNumber(value, maximumFractionDigits = 0) {
 
 function metricGuideEntry(label, note = "") {
   const text = `${label} ${note}`.toLocaleLowerCase();
-  const guideName = text.includes("expanded unemployment") || text.includes("lu3")
+  const guideName = text.includes("basic services pilot") || text.includes("civicscore")
+    ? "Basic services pilot score"
+    : text.includes("expanded unemployment") || text.includes("lu3")
     ? "Expanded unemployment (LU3)"
     : text.includes("unemployment")
       ? "Official unemployment rate"
@@ -1596,7 +1594,23 @@ function renderOverviewCensus(selected) {
     appendCensusMetric(metrics, "Population · 2022", formatCensusNumber(indicators.total_pop_2022), "people · Stats SA Census");
     appendCensusMetric(metrics, "Households · 2022", formatCensusNumber(indicators.households_2022), "households · Stats SA Census");
     appendCensusMetric(metrics, "Population change · 2011–2022", `${formatCensusNumber(indicators.growth_rate_2011_to_2022, 1)}%`, "reported Census growth rate");
+    const pilot = result.basicServicesPilot;
+    if (pilot && Number.isFinite(pilot.score) && Array.isArray(pilot.components) && pilot.components.length === 3) {
+      appendCensusMetric(metrics, "Basic services pilot score · 2022", `${formatCensusNumber(pilot.score, 1)} / 100`, "equal-weighted · 3 household shares");
+    }
     section.append(metrics);
+    if (pilot) {
+      const method = document.createElement("p");
+      method.className = "source-check-note";
+      method.textContent = `${pilot.method} ${pilot.limitation}`;
+      section.append(method);
+      pilot.components.forEach((component) => {
+        const line = document.createElement("p");
+        line.className = "finance-source-note";
+        line.textContent = `${component.label}: ${formatCensusNumber(component.value, 2)} ${component.unit} · ${component.source}.`;
+        section.append(line);
+      });
+    }
     if (result.source?.url) {
       const source = document.createElement("p");
       source.className = "finance-source-note";
@@ -3408,6 +3422,11 @@ function clearGeographySelection() {
   document.querySelector("#profile-area-note").textContent = "Select a geographic boundary";
   document.querySelector("#profile-population").textContent = "Data unavailable";
   document.querySelector("#profile-population-note").textContent = "Select a municipality for Census indicators";
+  const civicScore = document.querySelector("#profile-civicscore");
+  civicScore.textContent = "NOT SCORED";
+  civicScore.classList.add("unscored");
+  civicScore.classList.remove("civic-score-value");
+  document.querySelector("#profile-civicscore-note").textContent = "Select a municipality for the basic-services pilot";
   document.querySelector("#profile-unemployment").textContent = "Data unavailable";
   document.querySelector("#profile-unemployment-note").textContent = "Select a province or geography in a province";
   document.querySelector("#profile-indicator-status").textContent = "SELECT A GEOGRAPHY";
@@ -3438,6 +3457,14 @@ async function updateProfileSummary(selected) {
   const sourceDot = document.querySelector("#source-indicator-dot");
   const sourceLabel = document.querySelector("#source-indicator-label");
   const sourceNote = document.querySelector("#source-summary-note");
+  const civicScore = document.querySelector("#profile-civicscore");
+  const civicScoreNote = document.querySelector("#profile-civicscore-note");
+  civicScore.textContent = selected.level === "ADM3" ? "CALCULATING…" : "MUNICIPAL ONLY";
+  civicScore.classList.add("unscored");
+  civicScore.classList.remove("civic-score-value");
+  civicScoreNote.textContent = selected.level === "ADM3"
+    ? "Checking all three verified Census 2022 measures"
+    : "The pilot uses municipal Census service indicators";
   population.textContent = "Loading…";
   populationNote.textContent = selected.level === "ADM1"
     ? "Stats SA provincial Census total"
@@ -3499,6 +3526,24 @@ async function updateProfileSummary(selected) {
     populationNote.textContent = censusResult.status === "rejected"
       ? `Census request failed: ${censusResult.reason.message}`
       : "No Census record was returned for this municipality";
+  }
+
+  const pilot = selected.level === "ADM3" && censusResult.status === "fulfilled"
+    ? censusResult.value?.basicServicesPilot
+    : null;
+  if (pilot && Number.isFinite(pilot.score) && pilot.score >= 0 && pilot.score <= 100 &&
+    pilot.scale === 100 && pilot.year === 2022 && Array.isArray(pilot.components) && pilot.components.length === 3) {
+    civicScore.textContent = `${formatCensusNumber(pilot.score, 1)} / 100`;
+    civicScore.classList.remove("unscored");
+    civicScore.classList.add("civic-score-value");
+    civicScoreNote.textContent = "Census 2022 · 3 household shares · pilot";
+  } else {
+    civicScore.textContent = selected.level === "ADM3" ? "UNAVAILABLE" : "MUNICIPAL ONLY";
+    civicScore.classList.add("unscored");
+    civicScore.classList.remove("civic-score-value");
+    civicScoreNote.textContent = selected.level === "ADM3"
+      ? "All three verified Census 2022 measures are required"
+      : "The pilot is currently available for municipalities";
   }
 
   const labour = labourResult.status === "fulfilled" ? labourResult.value : null;
@@ -5067,6 +5112,7 @@ async function exportSelectedProfile() {
     return;
   }
   const selected = state.selected;
+  let basicServicesPilot = null;
   const rows = [
     ["field", "year", "value", "unit", "source"],
     ["name", "", selected.name, "", "geoBoundaries ADM3"],
@@ -5080,6 +5126,7 @@ async function exportSelectedProfile() {
       const result = state.censusCache.get(selected.id) ??
         await getJson(`/api/municipalities/${encodeURIComponent(selected.id)}/census`);
       state.censusCache.set(selected.id, result);
+      basicServicesPilot = result.basicServicesPilot ?? null;
       if (result.census) {
         Object.entries(result.census.indicators).forEach(([key, value]) => {
           if (typeof value !== "number" || !Number.isFinite(value) ||
@@ -5106,7 +5153,15 @@ async function exportSelectedProfile() {
       return;
     }
   }
-  rows.push(["CivicScore", "", "Not scored", "", "Insufficient verified indicators"]);
+  if (basicServicesPilot) {
+    rows.push(["CivicScore basic-services pilot", "2022", basicServicesPilot.score, "out of 100", basicServicesPilot.method]);
+    basicServicesPilot.components.forEach((component) => {
+      rows.push([component.label, "2022", component.value, component.unit, component.source]);
+    });
+    rows.push(["Pilot limitation", "2022", basicServicesPilot.limitation, "", "Interpret with the three source indicators"]);
+  } else {
+    rows.push(["CivicScore basic-services pilot", "2022", "Not available", "", selected.level === "ADM3" ? "All three verified Census 2022 service indicators are required" : "Municipal profiles only"]);
+  }
   downloadCsv(`civicstats-${selected.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`, rows);
   showToast("Municipality profile and available Census indicators downloaded with source attribution.");
 }

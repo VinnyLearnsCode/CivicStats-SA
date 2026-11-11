@@ -323,6 +323,7 @@ a { color: inherit; }
 .profile-stat-grid span, .profile-stat-grid small { display: block; color: #7f8b85; font: 7px var(--mono); letter-spacing: .04em; }
 .profile-stat-grid strong { display: block; margin: 6px 0 3px; color: #d3dad6; font: 15px var(--mono); }
 .profile-stat-grid strong.unscored { color: var(--amber); font-size: 10px; }
+.profile-stat-grid strong.civic-score-value { color: var(--accent); font-size: 14px; }
 .profile-stat-grid small { font-family: var(--sans); letter-spacing: 0; }
 .profile-period { display: flex; min-height: 31px; align-items: center; gap: 6px; color: #89958f; font: 8px var(--mono); }
 .profile-period .muted { width: 5px; height: 5px; background: #69746f; box-shadow: none; }

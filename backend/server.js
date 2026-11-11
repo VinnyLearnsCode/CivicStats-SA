@@ -513,6 +513,51 @@ function findCensusMunicipality(municipality, censusRecords) {
   return matches[0] ?? null;
 }
 
+function buildBasicServicesPilotScore(record, year, electricityRecord) {
+  if (!record || year !== 2022 || !electricityRecord) return null;
+  const households = record.households_2022;
+  const waterSchemeHouseholds = record.water_scheme_2022;
+  const flushToiletHouseholds = record.flush_toilet_2022;
+  if (!Number.isFinite(households) || households <= 0 ||
+    !Number.isFinite(waterSchemeHouseholds) || waterSchemeHouseholds < 0 || waterSchemeHouseholds > households ||
+    !Number.isFinite(flushToiletHouseholds) || flushToiletHouseholds < 0 || flushToiletHouseholds > households ||
+    !Number.isFinite(electricityRecord.share2022) || electricityRecord.share2022 < 0 || electricityRecord.share2022 > 100) {
+    return null;
+  }
+  const components = [
+    {
+      id: "water-scheme-households",
+      label: "Households reporting a water-scheme source",
+      value: Number(((waterSchemeHouseholds / households) * 100).toFixed(2)),
+      unit: "% of households",
+      source: "Stats SA Census 2022"
+    },
+    {
+      id: "flush-toilet-households",
+      label: "Households reporting a flush toilet",
+      value: Number(((flushToiletHouseholds / households) * 100).toFixed(2)),
+      unit: "% of households",
+      source: "Stats SA Census 2022"
+    },
+    {
+      id: "electricity-main-lighting",
+      label: "Households reporting electricity as main lighting source",
+      value: electricityRecord.share2022,
+      unit: "% of households",
+      source: "Stats SA Census 2022 Municipal fact sheet"
+    }
+  ];
+  return {
+    name: "Basic services pilot",
+    score: Number((components.reduce((sum, component) => sum + component.value, 0) / components.length).toFixed(1)),
+    scale: 100,
+    year: 2022,
+    method: "Equal-weighted arithmetic mean of the three displayed household shares. All three verified Census 2022 values are required; missing inputs are never treated as zero.",
+    limitation: "This is a household service-access pilot, not a complete municipal performance rating. Census responses describe 2022 conditions and do not measure current service quality, continuity or council responsibility.",
+    components
+  };
+}
+
 function normalizeMunicipalityName(value) {
   return String(value ?? "").normalize("NFKC").trim().toLocaleLowerCase().replace(/\s+/g, " ");
 }
@@ -2013,6 +2058,7 @@ export async function createAppServer({
         const population = censusRecord[`total_pop_${censusYear}`];
         const households = censusRecord[`households_${censusYear}`];
         const waterSchemeHouseholds = censusRecord[`water_scheme_${censusYear}`];
+        const flushToiletHouseholds = censusRecord[`flush_toilet_${censusYear}`];
         const electricityRecord = electricityLighting.get(censusRecord.muni_code);
         const areaKm2 = censusRecord.area_km2;
         if (![population, households, waterSchemeHouseholds, areaKm2].every(Number.isFinite) ||
@@ -2034,9 +2080,14 @@ export async function createAppServer({
           waterSchemeSharePercent: households > 0
             ? Number(((waterSchemeHouseholds / households) * 100).toFixed(2))
             : null,
+          flushToiletHouseholds,
+          flushToiletSharePercent: Number.isFinite(flushToiletHouseholds) && households > 0
+            ? Number(((flushToiletHouseholds / households) * 100).toFixed(2))
+            : null,
           electricityLightingSharePercent: censusYear === 2011
             ? electricityRecord.share2011
             : electricityRecord.share2022,
+          basicServicesPilot: buildBasicServicesPilotScore(censusRecord, censusYear, electricityRecord),
           sourceAreaKm2: areaKm2,
           populationDensityPerKm2: Number((population / areaKm2).toFixed(2))
         }];
@@ -2398,6 +2449,7 @@ export async function createAppServer({
           provinceCode: record.prov_code,
           indicators: record
         },
+        basicServicesPilot: buildBasicServicesPilotScore(record, 2022, electricityLighting.get(record.muni_code)),
         source: {
           publisher: "Statistics South Africa",
           title: "Census 2022: Provinces at a Glance",

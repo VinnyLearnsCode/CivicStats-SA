@@ -252,6 +252,14 @@ test("Census profile returns source-linked population, age and household indicat
   assert.equal(result.census.indicators.households_2022, 109294);
   assert.equal(result.census.indicators.age_15_to_34_2022, 121925);
   assert.equal(result.census.indicators.water_scheme_2022, 65373);
+  assert.equal(result.basicServicesPilot.name, "Basic services pilot");
+  assert.equal(result.basicServicesPilot.year, 2022);
+  assert.equal(result.basicServicesPilot.scale, 100);
+  assert.equal(result.basicServicesPilot.components.length, 3);
+  assert.equal(result.basicServicesPilot.score, Number((
+    result.basicServicesPilot.components.reduce((sum, item) => sum + item.value, 0) / 3
+  ).toFixed(1)));
+  assert.match(result.basicServicesPilot.limitation, /not a complete municipal performance rating/);
   assert.equal(result.electricity.indicators.electricityLightingSharePercent2011, 91.8);
   assert.equal(result.electricity.indicators.electricityLightingSharePercent2022, 97.2);
   assert.equal(result.electricity.source.publisher, "Statistics South Africa");
@@ -304,6 +312,14 @@ test("Census map layers return complete 2011 and 2022 municipal measures with ex
       record.electricityLightingSharePercent >= 0 &&
       record.electricityLightingSharePercent <= 100
     ), true);
+    if (year === 2022) {
+      assert.equal(result.records.every((record) => Number.isFinite(record.flushToiletSharePercent)), true);
+      assert.equal(result.records.every((record) =>
+        record.basicServicesPilot?.components.length === 3 &&
+        Number.isFinite(record.basicServicesPilot.score) &&
+        record.basicServicesPilot.score >= 0 && record.basicServicesPilot.score <= 100
+      ), true);
+    }
 
     const mogalakwena = result.records.find((record) => record.censusCode === "LIM367");
     const censusResponse = await get("/api/municipalities/" + encodeURIComponent(mogalakwena.id) + "/census");
@@ -438,6 +454,8 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /renderIndicatorGuide/);
   assert.match(applicationScript, /Provincial economy & labour/);
   assert.match(applicationScript, /function renderMapDataTable/);
+  assert.match(applicationScript, /basicServicesPilot/);
+  assert.match(applicationScript, /Basic services pilot score/);
   const profileSelectionSource = applicationScript.slice(
     applicationScript.indexOf("function updateProfile(selected)"),
     applicationScript.indexOf("function renderGeographyChildren(selected)")
@@ -461,6 +479,8 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(indexHtml, /export-map-table/);
   assert.match(indexHtml, /SOUTH AFRICA AT A GLANCE/);
   assert.match(indexHtml, /id="share-view-button"/);
+  assert.match(indexHtml, /id="profile-civicscore"/);
+  assert.match(indexHtml, /CIVICSCORE · BASIC SERVICES PILOT/);
   assert.match(indexHtml, /aria-describedby="map-keyboard-instructions"/);
   assert.match(indexHtml, /id="map-keyboard-hint"/);
   assert.match(indexHtml, /aria-live="polite"/);
