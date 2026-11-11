@@ -234,9 +234,9 @@
                   <p>Administrative data is loaded from geoBoundaries and remains read-only in this prototype.</p>
                 </article>
                 <article class="ops-card">
-                  <span class="ops-label">Bundled datasets</span>
-                  <strong>Stats SA &amp; IEC</strong>
-                  <p>Census 2011/2022, provincial GDP-R and unemployment, and 2021 IEC council-seat aggregates work on static hosting. Treasury finance, audit records, climate normals and publication feeds require the hosted API.</p>
+                  <span class="ops-label">Available data</span>
+                  <strong>Stats SA, IEC &amp; live sources</strong>
+                  <p>Census 2011/2022 household profiles and selected household-service indicators cover 213 municipalities. QLFS unemployment and GDP-R are provincial measures. Treasury finance and audit records, NASA POWER climate normals, World Bank national indicators and publication feeds load on demand through the hosted API.</p>
                 </article>
                 <article class="ops-card">
                   <span class="ops-label">Methodology</span>
@@ -244,9 +244,9 @@
                   <p>CivicScore is intentionally withheld until enough compatible indicators are imported and validated.</p>
                 </article>
                 <article class="ops-card">
-                  <span class="ops-label">Production path</span>
-                  <strong>Next release</strong>
-                  <p>Import validation, role controls, a PostgreSQL data layer, and a public admin workflow are staged next.</p>
+                  <span class="ops-label">Data platform</span>
+                  <strong>Source-linked and read-only</strong>
+                  <p>Public indicators are read-only. PostgreSQL stores reviewed imports and their audit trail; administrative import and approval actions remain protected and are not part of the public workspace.</p>
                 </article>
               </div>
             </section>
@@ -260,14 +260,14 @@
                 <div class="coverage-list">
                   <div class="coverage-row"><span class="coverage-icon">◷</span><span class="coverage-name">Demographics</span><span class="coverage-bar"><i style="width:100%"></i></span><span class="coverage-state">213 profiles</span></div>
                   <div class="coverage-row"><span class="coverage-icon">⌁</span><span class="coverage-name">Unemployment</span><span class="coverage-bar"><i style="width:100%"></i></span><span class="coverage-state">9 provinces</span></div>
-                  <div class="coverage-row"><span class="coverage-icon">☼</span><span class="coverage-name">Climate normals</span><span class="coverage-api-note">NASA POWER</span></div>
-                  <div class="coverage-row api-coverage"><span class="coverage-icon">▤</span><span class="coverage-name">Municipal finance</span><span class="coverage-api-note">API REQUIRED</span></div>
-                  <div class="coverage-row"><span class="coverage-icon">⊞</span><span class="coverage-name">Service delivery</span><span class="coverage-bar"><i style="width:0%"></i></span><span class="coverage-state">Not loaded</span></div>
+                  <div class="coverage-row"><span class="coverage-icon">☼</span><span class="coverage-name">Climate normals</span><span class="coverage-api-note">NASA POWER · live API</span></div>
+                  <div class="coverage-row"><span class="coverage-icon">▤</span><span class="coverage-name">Municipal finance &amp; audits</span><span class="coverage-api-note">Treasury · live API</span></div>
+                  <div class="coverage-row"><span class="coverage-icon">⊞</span><span class="coverage-name">Household services</span><span class="coverage-api-note">Census · 213 municipalities</span></div>
                 </div>
               </section>
               <section class="panel data-notice">
                 <div class="notice-symbol">!</div>
-                <div><span class="panel-kicker">DATA INTEGRITY</span><p>Bundled Stats SA Census profiles cover all 213 municipalities; Stats SA QLFS unemployment covers all nine provinces. Treasury finance and NASA POWER climate normals require the hosted Node API. Municipality-level labour and industry output remain unavailable.</p><button class="text-button" data-view="sources">EXPLORE DATA SOURCES <span>↗</span></button></div>
+                <div><span class="panel-kicker">DATA INTEGRITY</span><p>Verified coverage: Census profiles and selected household-service measures for 213 municipalities; QLFS unemployment and GDP-R for nine provinces; and live Treasury finance/audit, NASA POWER climate, World Bank national indicators and publication feeds. Municipality-level labour and industry output, current 2026 council seats, service reliability, and named project delivery records are not available in this release. CivicScore remains unscored until compatible indicators are validated.</p><button class="text-button" data-view="sources">EXPLORE DATA SOURCES <span>↗</span></button></div>
               </section>
             </div>
           </div>
