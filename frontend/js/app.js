@@ -1005,6 +1005,49 @@ function setTab(tab) {
   updateNavigation();
 }
 
+function renderNationalOverviewDetail() {
+  const metrics = document.createElement("div");
+  metrics.className = "census-metric-grid national-overview-grid";
+  const censusRecords = [...state.censusMapRecords.values()];
+  const censusLoaded = state.municipalities.length > 0 &&
+    censusRecords.length === state.municipalities.length;
+  const totalHouseholds = censusLoaded
+    ? censusRecords.reduce((sum, record) => sum + record.households, 0)
+    : null;
+  const totalWaterSchemeHouseholds = censusLoaded
+    ? censusRecords.reduce((sum, record) => sum + record.waterSchemeHouseholds, 0)
+    : null;
+  const totalElectricityLightingHouseholds = censusLoaded
+    ? censusRecords.reduce((sum, record) =>
+      sum + record.electricityLightingSharePercent * record.households / 100, 0)
+    : null;
+  const numberOfHouseholds = Number.isFinite(totalHouseholds) && totalHouseholds > 0 ? totalHouseholds : null;
+  const censusUnavailable = state.censusMapError ? "Unavailable" : "Loading…";
+  const householdCount = numberOfHouseholds == null
+    ? censusUnavailable
+    : formatCensusNumber(numberOfHouseholds);
+  const waterShare = numberOfHouseholds == null || !Number.isFinite(totalWaterSchemeHouseholds)
+    ? censusUnavailable
+    : `${formatCensusNumber(totalWaterSchemeHouseholds / numberOfHouseholds * 100, 1)}%`;
+  const electricityShare = numberOfHouseholds == null || !Number.isFinite(totalElectricityLightingHouseholds)
+    ? censusUnavailable
+    : `${formatCensusNumber(totalElectricityLightingHouseholds / numberOfHouseholds * 100, 1)}%`;
+  const period = state.labourData?.periods.find((item) => item.code === state.labourQuarter)?.label;
+  const labourCoverage = state.labourData
+    ? `${state.labourMapRecords.size} / ${state.labourData.totalProvinces} provinces`
+    : state.labourMapError ? "Unavailable" : "Loading…";
+
+  appendCensusMetric(metrics, "Households", householdCount,
+    censusLoaded ? `Stats SA Census ${state.censusMapYear} · ${censusRecords.length} municipalities` : `Stats SA Census ${state.censusMapYear} · ${state.censusMapLoading ? "loading" : "source data unavailable"}`);
+  appendCensusMetric(metrics, "Households reporting a water-scheme source", waterShare,
+    `Stats SA Census ${state.censusMapYear} · household-weighted national share`);
+  appendCensusMetric(metrics, "Households reporting electricity as main lighting", electricityShare,
+    `Stats SA Census ${state.censusMapYear} · household-weighted national share`);
+  appendCensusMetric(metrics, "QLFS provincial coverage", labourCoverage,
+    period ? `Stats SA · ${period} · provincial estimates, not a national rate` : "Stats SA Quarterly Labour Force Survey");
+  detailBody.append(metrics);
+}
+
 function renderDetail() {
   const content = tabContent[state.tab];
   document.querySelector("#detail-kicker").textContent = content.kicker;
@@ -1044,8 +1087,15 @@ function renderDetail() {
   if (state.tab === "overview") {
     const intro = document.createElement("p");
     intro.className = "detail-intro";
-    intro.textContent = content.intro;
+    intro.textContent = state.selected
+      ? content.intro
+      : "South Africa-wide household indicators and verified coverage. GDP and population are shown in the national snapshot above.";
     detailBody.append(intro);
+
+    if (!state.selected) {
+      renderNationalOverviewDetail();
+      return;
+    }
 
     const grid = document.createElement("div");
     grid.className = "detail-grid";
@@ -4195,6 +4245,7 @@ async function loadProvincialLabourData() {
       refreshMapStyles();
       renderNationalMetrics();
       renderNationalHighlights();
+      if (state.tab === "overview" && !state.selected) renderDetail();
       if (state.selected) void updateProfileSummary(state.selected);
     });
   return state.labourLoadPromise;
@@ -4398,6 +4449,7 @@ async function loadCensusMapData(year) {
     refreshMapStyles();
     renderNationalMetrics();
     renderNationalHighlights();
+    if (state.tab === "overview" && !state.selected) renderDetail();
     if (state.view === "municipalities") renderAlternateView();
   } catch (error) {
     if (requestId !== state.censusMapRequestId) return;
@@ -4408,6 +4460,7 @@ async function loadCensusMapData(year) {
     refreshMapStyles();
     renderNationalMetrics();
     renderNationalHighlights();
+    if (state.tab === "overview" && !state.selected) renderDetail();
     if (state.view === "municipalities") renderAlternateView();
   }
 }
