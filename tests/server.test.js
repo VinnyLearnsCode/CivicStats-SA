@@ -377,15 +377,18 @@ test("the browser application is served with security headers", async () => {
 });
 
 test("the stylesheet, browser application and bundled source catalogue are served", async () => {
-  const [stylesheet, application, sourceCatalogue] = await Promise.all([
+  const [stylesheet, application, sourceCatalogue, index] = await Promise.all([
     get("/css/app.css"),
     get("/js/app.js"),
-    get("/assets/data-sources.json")
+    get("/assets/data-sources.json"),
+    get("/html/index.html")
   ]);
   assert.equal(stylesheet.status, 200);
   assert.match(stylesheet.headers.get("content-type"), /text\/css/);
   const stylesheetText = await stylesheet.text();
   assert.match(stylesheetText, /\.nav-link-planned/);
+  assert.match(stylesheetText, /\.map-data-table-panel/);
+  assert.match(stylesheetText, /\.visually-hidden/);
   assert.equal(application.status, 200);
   assert.match(application.headers.get("content-type"), /javascript/);
   const applicationScript = await application.text();
@@ -395,6 +398,14 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /indicatorGuideEntries/);
   assert.match(applicationScript, /renderIndicatorGuide/);
   assert.match(applicationScript, /Provincial economy & labour/);
+  assert.match(applicationScript, /function renderMapDataTable/);
+  assert.match(applicationScript, /Colours are grouped into five bands/);
+  assert.match(applicationScript, /Use the arrow keys to review results/);
+  assert.equal(index.status, 200);
+  const indexHtml = await index.text();
+  assert.match(indexHtml, /role="combobox" aria-autocomplete="list"/);
+  assert.match(indexHtml, /map-data-table-toggle/);
+  assert.match(indexHtml, /aria-live="polite"/);
   assert.equal(sourceCatalogue.status, 200);
   const sources = await sourceCatalogue.json();
   assert.ok(sources.some((source) => source.id === "geoboundaries"));

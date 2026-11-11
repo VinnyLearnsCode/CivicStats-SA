@@ -714,3 +714,21 @@ body { font-size: 14px; line-height: 1.5; }
   .data-table td { padding: 11px 8px; }
   .statusbar { font-size: 9px; }
 }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.map-data-table-toggle { min-height: 36px; padding: 0 9px; border: 1px solid var(--border); background: #202825; color: var(--accent-soft); cursor: pointer; font: 10px var(--sans); }
+.map-data-table-toggle:hover { border-color: var(--accent); color: var(--text); }
+.map-data-table-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.map-data-table-panel { padding: 12px; border-top: 1px solid var(--border-soft); background: var(--panel); }
+.map-data-table-panel[hidden] { display: none; }
+.map-data-table-panel h3 { margin: 0 0 4px; color: var(--text); font-size: 14px; font-weight: 500; }
+.map-data-table-panel > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.map-data-table { min-width: 520px; }
+.map-data-table caption { padding: 8px; color: var(--muted); font-size: 11px; text-align: left; }
+.map-data-table tbody th[scope="row"] { padding: 10px 9px; border-bottom: 1px solid var(--border-soft); color: var(--text); font-size: 12px; font-weight: 500; text-align: left; }
+.map-data-table td:nth-child(2) { font-variant-numeric: tabular-nums; }
+.map-data-table-toggle { font-size: 11px; }
+@media (max-width: 640px) {
+  .map-data-table-panel { padding: 10px 8px; }
+  .map-data-table-toggle { min-height: 40px; }
+}

@@ -3,6 +3,7 @@ const state = {
   tab: "overview",
   boundaryLevel: "ADM3",
   mapLayer: "population",
+  mapDataTableOpen: false,
   censusMapRecords: new Map(),
   censusMapYear: 2022,
   censusMapRequestId: 0,
@@ -182,6 +183,7 @@ const detailBody = document.querySelector("#detail-body");
 const toast = document.querySelector("#toast");
 const searchInput = document.querySelector("#global-search");
 const searchResults = document.querySelector("#search-results");
+const searchStatus = document.querySelector("#search-status");
 const searchClear = document.querySelector("#clear-search");
 const sectionTabs = document.querySelector("#section-tabs");
 const workspaceGrid = document.querySelector("#workspace-grid");
@@ -3469,6 +3471,84 @@ function mapTooltip(feature) {
   return `${name} · Census ${record.year} households reporting water scheme: ${formatCensusNumber(record.waterSchemeSharePercent, 1)}%`;
 }
 
+function mapTablePresentation() {
+  const year = state.mapLayer === "unemployment"
+    ? state.labourData?.periods.find((item) => item.code === state.labourQuarter)?.label ?? state.labourQuarter
+    : state.mapLayer === "economy"
+      ? state.economyMapYear
+      : state.censusMapYear;
+  const values = {
+    boundaries: ["Administrative boundary", "—", "Boundary vintage 2020"],
+    population: ["Population density", "people/km²", `Census ${year}`],
+    growth: ["Reported population change", "%", "Census 2011–2022"],
+    unemployment: ["Official unemployment rate", "%", year],
+    economy: ["Share of national GDP", "%", `GDP-R ${year}`],
+    electricity: ["Households reporting electricity as their main lighting source", "% of households", `Census ${year}`],
+    water: ["Households reporting a water-scheme source", "% of households", `Census ${year}`]
+  };
+  const [label, unit, period] = values[state.mapLayer] ?? ["Map indicator", "", ""];
+  return { label, unit, period };
+}
+
+function renderMapDataTable() {
+  const panel = document.querySelector("#map-data-table-panel");
+  const title = document.querySelector("#map-data-table-title");
+  const description = document.querySelector("#map-data-table-description");
+  const content = document.querySelector("#map-data-table-content");
+  if (!panel || panel.hidden || !title || !description || !content) return;
+  const presentation = mapTablePresentation();
+  const geographyLevel = formatBoundaryLevel(state.boundaryLevel);
+  title.textContent = `${presentation.label} · ${geographyLevel}`;
+  description.textContent = `Reporting period: ${presentation.period}. Values are ${presentation.unit}. “Not available” means no compatible source value was loaded for that area.`;
+  content.replaceChildren();
+  const collection = state.collections.get(state.boundaryLevel);
+  if (!collection?.features?.length) {
+    const message = document.createElement("p");
+    message.className = "finance-source-note";
+    message.textContent = "Boundary data is still loading.";
+    content.append(message);
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "data-table map-data-table";
+  table.setAttribute("aria-describedby", "map-data-table-description");
+  const caption = document.createElement("caption");
+  caption.textContent = `${presentation.label} by ${geographyLevel.toLocaleLowerCase()}`;
+  table.append(caption);
+  const thead = document.createElement("thead");
+  const header = document.createElement("tr");
+  ["Area", `Value${presentation.unit && presentation.unit !== "—" ? ` (${presentation.unit})` : ""}`, "Reporting period"].forEach((label) => {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = label;
+    header.append(cell);
+  });
+  thead.append(header);
+  const tbody = document.createElement("tbody");
+  collection.features
+    .slice()
+    .sort((left, right) => left.properties.shapeName.localeCompare(right.properties.shapeName))
+    .forEach((feature) => {
+      const row = document.createElement("tr");
+      const area = document.createElement("th");
+      area.scope = "row";
+      area.textContent = feature.properties.shapeName;
+      const valueCell = document.createElement("td");
+      const value = mapIndicatorValue(feature);
+      valueCell.textContent = state.mapLayer === "boundaries"
+        ? "Boundary available"
+        : typeof value === "number" && Number.isFinite(value)
+          ? formatCensusNumber(value, 1)
+          : "Not available";
+      const periodCell = document.createElement("td");
+      periodCell.textContent = presentation.period;
+      row.append(area, valueCell, periodCell);
+      tbody.append(row);
+    });
+  table.append(thead, tbody);
+  content.append(table);
+}
+
 function renderMapLegend() {
   const heading = document.querySelector("#map-legend-heading");
   const items = document.querySelector("#map-legend-items");
@@ -3856,6 +3936,7 @@ function refreshMapStyles() {
   refreshSelectionLayer();
   renderMapLegend();
   updateMapLayerControls();
+  if (state.mapDataTableOpen) renderMapDataTable();
 }
 
 async function loadCensusMapData(year) {
@@ -3948,6 +4029,7 @@ function setMapLayer(collection) {
     `${collection.features.length} ${state.boundaryLevel === "ADM1" ? "provinces" : state.boundaryLevel === "ADM2" ? "districts & metros" : "municipal boundaries"}`;
   updateMapLayerControls();
   renderMapLegend();
+  if (state.mapDataTableOpen) renderMapDataTable();
   const bounds = state.boundaryLayer.getBounds();
   if (state.boundaryLevel === "ADM3" && bounds.isValid()) state.nationalBounds = bounds;
   if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
@@ -4025,7 +4107,7 @@ async function selectGeography(item, { focus = true } = {}) {
   document.querySelector("#mobile-scrim").hidden = true;
   document.body.classList.remove("mobile-nav-open");
   setMobileProfileOpen(window.matchMedia("(max-width: 640px)").matches);
-  searchResults.hidden = true;
+  closeSearchResults();
 }
 
 function setMobileProfileOpen(open) {
@@ -4298,17 +4380,17 @@ function renderComparison() {
     `<td data-comparison-field="${key}" data-index="${index}">—</td>`
   ).join("")}</tr>`).join("");
   const indicators = [
-    ["Population · 2011", "total_pop_2011"],
-    ["Population · 2022", "total_pop_2022"],
-    ["Reported population growth · 2011–2022", "growth_rate_2011_to_2022"],
-    ["Households · 2011", "households_2011"],
-    ["Households · 2022", "households_2022"],
-    ["Average household size · 2022", "avg_household_size_2022"],
-    ["Water scheme · 2022 share of households", "water_scheme_share_2022"],
-    ["Flush toilet · 2022 share of households", "flush_toilet_share_2022"],
-    ["Electricity used for cooking · 2022 share", "electricity_cooking_share_2022"],
-    ["Electricity as main lighting source · 2022 household share", "electricity_lighting_share_2022"],
-    ["School attendance · ages 5–24, 2022", "school_attendance_ages_5_to_24_2022"]
+    ["Population · 2011 (people)", "total_pop_2011"],
+    ["Population · 2022 (people)", "total_pop_2022"],
+    ["Reported population change · 2011–2022 (%)", "growth_rate_2011_to_2022"],
+    ["Households · 2011 (households)", "households_2011"],
+    ["Households · 2022 (households)", "households_2022"],
+    ["Average household size · 2022 (people per household)", "avg_household_size_2022"],
+    ["Households using a water scheme · 2022 (%)", "water_scheme_share_2022"],
+    ["Households with a flush toilet · 2022 (%)", "flush_toilet_share_2022"],
+    ["Households using electricity for cooking · 2022 (%)", "electricity_cooking_share_2022"],
+    ["Households using electricity for lighting · 2022 (%)", "electricity_lighting_share_2022"],
+    ["People aged 5–24 attending school · 2022 (people)", "school_attendance_ages_5_to_24_2022"]
   ];
   const indicatorRows = indicators.map(([label, key]) =>
     `<tr><td>${label}</td>${selectedIds.map((_, index) =>
@@ -4319,7 +4401,7 @@ function renderComparison() {
     <h3 class="comparison-subheading">Available geographic metadata</h3>
     <div class="data-table-wrap"><table class="data-table compare-table"><thead><tr><th>Property</th><th data-compare-heading="0">Geography 1</th><th data-compare-heading="1">Geography 2</th><th data-compare-heading="2">Geography 3</th></tr></thead><tbody>${metadataRows}</tbody></table></div>
     <h3 class="comparison-subheading">Census population &amp; households · 2011 and 2022</h3>
-    <p class="source-check-note" id="compare-census-note">Population and household counts use the Stats SA Census extract; electricity for lighting uses the separate Stats SA municipal fact sheet. Shares retain their published definitions. Incompatible values are not ranked.</p>
+    <p class="source-check-note" id="compare-census-note">Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.</p>
     <div class="data-table-wrap"><table class="data-table compare-table"><thead><tr><th>Indicator</th><th data-indicator-heading="0">Geography 1</th><th data-indicator-heading="1">Geography 2</th><th data-indicator-heading="2">Geography 3</th></tr></thead><tbody>${indicatorRows}</tbody></table></div>`;
 }
 
@@ -4633,13 +4715,18 @@ async function exportSelectedProfile() {
   showToast("Municipality profile and available Census indicators downloaded with source attribution.");
 }
 
+function closeSearchResults() {
+  searchResults.hidden = true;
+  searchInput.setAttribute("aria-expanded", "false");
+  searchInput.removeAttribute("aria-activedescendant");
+}
+
 function renderSearchResults(query) {
   const normalized = query.trim().toLocaleLowerCase();
   if (!normalized) {
-    searchResults.hidden = true;
+    closeSearchResults();
     searchResults.replaceChildren();
-    searchInput.setAttribute("aria-expanded", "false");
-    searchInput.removeAttribute("aria-activedescendant");
+    if (searchStatus) searchStatus.textContent = "";
     searchClear.hidden = true;
     state.searchMatches = [];
     state.searchActiveIndex = -1;
@@ -4673,6 +4760,8 @@ function renderSearchResults(query) {
     searchResults.append(empty);
     searchResults.hidden = false;
     searchInput.setAttribute("aria-expanded", "true");
+    searchInput.removeAttribute("aria-activedescendant");
+    if (searchStatus) searchStatus.textContent = `No places found for ${query}.`;
     return;
   }
   matches.forEach((item, index) => {
@@ -4690,7 +4779,7 @@ function renderSearchResults(query) {
     button.append(name, place);
     button.addEventListener("click", () => {
       searchInput.value = item.name;
-      searchResults.hidden = true;
+      closeSearchResults();
       void selectGeography(item);
     });
     searchResults.append(button);
@@ -4698,6 +4787,7 @@ function renderSearchResults(query) {
   searchResults.hidden = false;
   searchInput.setAttribute("aria-expanded", "true");
   searchInput.setAttribute("aria-activedescendant", `search-result-${state.searchActiveIndex}`);
+  if (searchStatus) searchStatus.textContent = `${matches.length} place${matches.length === 1 ? "" : "s"} found. Use the arrow keys to review results and Enter to open one.`;
 }
 
 function updateActiveSearchResult(index) {
@@ -4778,6 +4868,14 @@ function bindEvents() {
     button.setAttribute("aria-label", active ? "Exit map full screen" : "Enter map full screen");
     button.title = active ? "Exit full screen" : "Full screen map";
   });
+  document.querySelector("#map-data-table-toggle").addEventListener("click", (event) => {
+    state.mapDataTableOpen = !state.mapDataTableOpen;
+    const panel = document.querySelector("#map-data-table-panel");
+    panel.hidden = !state.mapDataTableOpen;
+    event.currentTarget.setAttribute("aria-expanded", String(state.mapDataTableOpen));
+    event.currentTarget.textContent = state.mapDataTableOpen ? "Hide map data table" : "View map data as a table";
+    if (state.mapDataTableOpen) renderMapDataTable();
+  });
   document.querySelector("#compare-map-toggle").addEventListener("click", async () => {
     if (state.boundaryLevel !== "ADM3") {
       try {
@@ -4844,8 +4942,7 @@ function bindEvents() {
   searchInput.addEventListener("focus", () => renderSearchResults(searchInput.value));
   searchInput.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      searchResults.hidden = true;
-      searchInput.setAttribute("aria-expanded", "false");
+      closeSearchResults();
       searchInput.blur();
     } else if (event.key === "ArrowDown" && !searchResults.hidden) {
       event.preventDefault();
@@ -4893,7 +4990,7 @@ function bindEvents() {
     if (item) void selectGeography(item);
   });
   document.addEventListener("click", (event) => {
-    if (!event.target.closest(".global-search")) searchResults.hidden = true;
+    if (!event.target.closest(".global-search")) closeSearchResults();
   });
   document.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {

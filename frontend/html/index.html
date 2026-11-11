@@ -78,10 +78,11 @@
           <div class="topbar-actions">
             <label class="global-search">
               <span aria-hidden="true">⌕</span>
-              <input id="global-search" type="search" placeholder="Find a province, district or municipality…" autocomplete="off" aria-label="Search South African geographies" aria-controls="search-results" aria-expanded="false">
+              <input id="global-search" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" placeholder="Find a province, district or municipality…" autocomplete="off" aria-label="Search South African geographies" aria-controls="search-results" aria-expanded="false">
               <kbd>Ctrl K</kbd>
               <button class="search-clear" id="clear-search" type="button" aria-label="Clear geographic search" title="Clear search" hidden>×</button>
-              <div class="search-results" id="search-results" role="listbox" aria-label="Municipality search results" hidden></div>
+              <div class="search-results" id="search-results" role="listbox" aria-label="Geography search results" hidden></div>
+              <span class="visually-hidden" id="search-status" role="status" aria-live="polite"></span>
             </label>
             <span class="topbar-divider"></span>
             <span class="data-status"><i></i> DATA STATUS <strong id="data-status-label">BOUNDARIES LOADED</strong></span>
@@ -196,7 +197,13 @@
                 <span id="boundary-count">— boundary features</span>
                 <span>Source: geoBoundaries · OCHA ROSEA / Municipal Demarcation Board</span>
                 <a href="https://www.geoboundaries.org/" target="_blank" rel="noreferrer">Source &amp; licence ↗</a>
+                <button class="map-data-table-toggle" id="map-data-table-toggle" type="button" aria-expanded="false" aria-controls="map-data-table-panel">View map data as a table</button>
               </div>
+              <section class="map-data-table-panel" id="map-data-table-panel" aria-label="Accessible map data table" hidden>
+                <h3 id="map-data-table-title">Map values</h3>
+                <p id="map-data-table-description"></p>
+                <div class="data-table-wrap" id="map-data-table-content"></div>
+              </section>
               <section class="map-compare-panel" id="map-compare-panel" aria-label="Municipalities selected for comparison" hidden>
                 <div><span class="panel-kicker">MAP COMPARISON</span><p id="map-compare-status">Select two or three municipalities on the map.</p></div>
                 <div class="map-compare-list" id="map-compare-list"></div>
