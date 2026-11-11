@@ -5403,7 +5403,12 @@ function updateActiveSearchResult(index) {
 function bindEvents() {
   document.querySelectorAll(".nav-link[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
-      setView(button.dataset.view);
+      if (button.dataset.view === "dashboard") {
+        setTab("overview");
+        resetMapToNational();
+      } else {
+        setView(button.dataset.view);
+      }
       document.body.classList.remove("mobile-nav-open");
       document.querySelector("#mobile-scrim").hidden = true;
     });
