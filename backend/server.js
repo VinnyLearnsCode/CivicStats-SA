@@ -430,22 +430,64 @@ async function loadMunicipalCouncillors2021(censusMunicipalities) {
   return { source: dataset.source, recordsByCode };
 }
 
-function safeMunicipality(feature, boundaries) {
+function safeMunicipality(feature, boundaries, censusRecords) {
   const point = representativePoint(feature);
   const findParent = (level) =>
     boundaries.get(level)?.features.find((candidate) =>
       point && pointInGeometry(point, candidate.geometry)
-    )?.properties.shapeName ?? null;
-  const province = canonicalProvinceName(findParent("ADM1"));
-
-  return {
+    ) ?? null;
+  const provinceFeature = findParent("ADM1");
+  const districtFeature = findParent("ADM2");
+  const municipality = {
     id: feature.properties.shapeID,
     name: feature.properties.shapeName,
     level: feature.properties.shapeType,
-    province,
-    district: findParent("ADM2"),
+    province: canonicalProvinceName(provinceFeature?.properties.shapeName ?? null),
+    provinceId: provinceFeature?.properties.shapeID ?? null,
+    district: districtFeature?.properties.shapeName ?? null,
+    districtId: districtFeature?.properties.shapeID ?? null,
     areaKm2: geometryAreaKm2(feature.geometry),
     areaMethod: "Approximate spherical area calculated from the geoBoundaries polygon."
+  };
+  const censusRecord = findCensusMunicipality(municipality, censusRecords);
+
+  return {
+    ...municipality,
+    officialCode: censusRecord?.muni_code ?? null,
+    category: municipality.district === municipality.name
+      ? "Category A · Metropolitan municipality"
+      : "Category B · Local municipality"
+  };
+}
+
+function safeGeography(feature, boundaries, municipalities, metropolitanNames) {
+  const { shapeID: id, shapeName: rawName, shapeType: level } = feature.properties;
+  const name = level === "ADM1" ? canonicalProvinceName(rawName) : rawName;
+  if (level === "ADM3") return municipalities.find((item) => item.id === id);
+
+  const point = representativePoint(feature);
+  const province = level === "ADM1"
+    ? feature
+    : boundaries.get("ADM1")?.features.find((candidate) =>
+      point && pointInGeometry(point, candidate.geometry)
+    );
+  const isMetropolitan = metropolitanNames.has(name);
+  return {
+    id,
+    name,
+    level,
+    province: canonicalProvinceName(province?.properties.shapeName ?? null),
+    provinceId: level === "ADM1" ? id : province?.properties.shapeID ?? null,
+    district: level === "ADM2" ? name : null,
+    districtId: level === "ADM2" ? id : null,
+    areaKm2: geometryAreaKm2(feature.geometry),
+    areaMethod: "Approximate spherical area calculated from the geoBoundaries polygon.",
+    category: level === "ADM1"
+      ? "Province"
+      : isMetropolitan
+        ? "Category A · Metropolitan municipality"
+        : "Category C · District municipality",
+    officialCode: null
   };
 }
 
@@ -774,7 +816,9 @@ async function loadNasaPowerClimatology(providerClient, feature) {
 
   return {
     geography: {
-      name: feature.properties.shapeName,
+      name: feature.properties.shapeType === "ADM1"
+        ? canonicalProvinceName(feature.properties.shapeName)
+        : feature.properties.shapeName,
       level: feature.properties.shapeType
     },
     coordinates: {
@@ -1092,7 +1136,15 @@ export async function createAppServer({ fetchImpl = globalThis.fetch } = {}) {
   const provincialUnemployment = await loadProvincialUnemployment();
   const municipalCouncillors2021 = await loadMunicipalCouncillors2021(censusMunicipalities);
   const municipalities = boundaries.get("ADM3").features.map((feature) =>
-    safeMunicipality(feature, boundaries)
+    safeMunicipality(feature, boundaries, censusMunicipalities)
+  );
+  const metropolitanNames = new Set(municipalities
+    .filter((municipality) => municipality.district === municipality.name)
+    .map((municipality) => municipality.name));
+  const geographies = [...boundaries.values()].flatMap((collection) =>
+    collection.features.map((feature) =>
+      safeGeography(feature, boundaries, municipalities, metropolitanNames)
+    )
   );
 
   return createServer((request, response) => {
@@ -1276,6 +1328,9 @@ export async function createAppServer({ fetchImpl = globalThis.fetch } = {}) {
           censusCode: censusRecord.muni_code,
           year: censusYear,
           population,
+          populationGrowthPercent: Number.isFinite(censusRecord.growth_rate_2011_to_2022)
+            ? censusRecord.growth_rate_2011_to_2022
+            : null,
           households,
           waterSchemeHouseholds,
           waterSchemeSharePercent: households > 0
@@ -1451,6 +1506,18 @@ export async function createAppServer({ fetchImpl = globalThis.fetch } = {}) {
       return;
     }
 
+    if (url.pathname === "/api/geographies") {
+      const query = (url.searchParams.get("q") ?? "").trim().slice(0, 100).toLocaleLowerCase();
+      const filtered = query
+        ? geographies.filter((item) =>
+          [item.name, item.province, item.district, item.officialCode]
+            .some((value) => value?.toLocaleLowerCase().includes(query))
+        )
+        : geographies;
+      jsonResponse(response, 200, { total: filtered.length, geographies: filtered });
+      return;
+    }
+
     if (url.pathname === "/api/municipalities") {
       const query = (url.searchParams.get("q") ?? "").trim().slice(0, 100).toLocaleLowerCase();
       const filtered = query
@@ -1470,7 +1537,11 @@ export async function createAppServer({ fetchImpl = globalThis.fetch } = {}) {
         jsonResponse(response, 404, { error: "Unknown boundary level." });
         return;
       }
-      jsonResponse(response, 200, collection);
+      response.writeHead(200, {
+        ...jsonHeaders,
+        "cache-control": "public, max-age=86400, stale-while-revalidate=604800"
+      });
+      response.end(JSON.stringify(collection));
       return;
     }
 

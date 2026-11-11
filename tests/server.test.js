@@ -86,6 +86,60 @@ test("local and district municipalities and source provenance are available", as
   assert.match(sources.find((source) => source.id === "treasury").detail, /financial position/);
 });
 
+test("geographic directory exposes unique IDs, hierarchy, classifications and code search", async () => {
+  const response = await get("/api/geographies");
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.total, 274);
+  assert.ok(result.geographies.some((item) => item.level === "ADM1" && item.name === "Northern Cape"));
+  assert.ok(!result.geographies.some((item) => item.level === "ADM1" && item.name === "Nothern Cape"));
+  assert.deepEqual(
+    Object.fromEntries(["ADM1", "ADM2", "ADM3"].map((level) => [
+      level,
+      result.geographies.filter((item) => item.level === level).length
+    ])),
+    { ADM1: 9, ADM2: 52, ADM3: 213 }
+  );
+  const ids = result.geographies.map((item) => item.id);
+  assert.equal(ids.every((id) => typeof id === "string" && id.length > 0), true);
+  assert.equal(new Set(ids).size, ids.length, "boundary identifiers must be unique across levels");
+
+  const province = result.geographies.find((item) => item.level === "ADM1" && item.name === "Limpopo");
+  const district = result.geographies.find((item) => item.level === "ADM2" && item.name === "Waterberg");
+  const localMunicipality = result.geographies.find((item) =>
+    item.level === "ADM3" && item.name === "Mogalakwena"
+  );
+  const metro = result.geographies.find((item) =>
+    item.level === "ADM3" && item.name === "City of Johannesburg"
+  );
+  assert.ok(province);
+  assert.ok(district);
+  assert.ok(localMunicipality);
+  assert.ok(metro);
+  assert.equal(district.provinceId, province.id);
+  assert.equal(district.province, province.name);
+  assert.equal(localMunicipality.provinceId, province.id);
+  assert.equal(localMunicipality.districtId, district.id);
+  assert.ok(result.geographies.some((item) =>
+    item.level === "ADM2" && item.provinceId === province.id && item.id === district.id
+  ));
+  assert.ok(result.geographies.some((item) =>
+    item.level === "ADM3" && item.districtId === district.id && item.id === localMunicipality.id
+  ));
+  assert.equal(localMunicipality.officialCode, "LIM367");
+  assert.equal(localMunicipality.category, "Category B · Local municipality");
+  assert.equal(metro.category, "Category A · Metropolitan municipality");
+  assert.equal(district.category, "Category C · District municipality");
+
+  const search = await get("/api/geographies?q=LIM367").then((item) => item.json());
+  assert.equal(search.total, 1);
+  assert.equal(search.geographies[0].id, localMunicipality.id);
+
+  const boundaries = await get("/api/geo/ADM1");
+  assert.equal(boundaries.status, 200);
+  assert.match(boundaries.headers.get("cache-control"), /max-age=86400/);
+});
+
 test("IEC 2021 party seat counts cover all municipalities and keep ward and PR seats distinct", async () => {
   const { municipalities } = await get("/api/municipalities").then((response) => response.json());
   const records = [];

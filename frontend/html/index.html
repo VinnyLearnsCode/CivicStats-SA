@@ -87,8 +87,9 @@
           <div class="topbar-actions">
             <label class="global-search">
               <span aria-hidden="true">⌕</span>
-              <input id="global-search" type="search" placeholder="Find a municipality…" autocomplete="off" aria-label="Search municipalities">
+              <input id="global-search" type="search" placeholder="Find a province, district or municipality…" autocomplete="off" aria-label="Search South African geographies" aria-controls="search-results" aria-expanded="false">
               <kbd>Ctrl K</kbd>
+              <button class="search-clear" id="clear-search" type="button" aria-label="Clear geographic search" title="Clear search" hidden>×</button>
               <div class="search-results" id="search-results" role="listbox" aria-label="Municipality search results" hidden></div>
             </label>
             <span class="topbar-divider"></span>
@@ -130,7 +131,7 @@
                   <h2>National geographic explorer</h2>
                 </div>
                 <div class="map-heading-actions">
-                  <button class="square-button mobile-profile-toggle" id="mobile-profile-toggle" aria-label="Show municipality information" title="Municipality information">ⓘ</button>
+                  <button class="square-button mobile-profile-toggle" id="mobile-profile-toggle" aria-label="Show municipality information" aria-expanded="false" title="Municipality information">ⓘ</button>
                   <label class="compact-select-label" for="boundary-level">BOUNDARIES</label>
                   <select id="boundary-level" class="compact-select" aria-label="Choose boundary layer">
                     <option value="ADM3">Municipalities</option>
@@ -138,6 +139,8 @@
                     <option value="ADM1">Provinces</option>
                   </select>
                   <button class="square-button" id="fit-map" aria-label="Show all South Africa" title="Show all South Africa">⌖</button>
+                  <button class="square-button" id="fullscreen-map" aria-label="Enter map full screen" title="Full screen map">⛶</button>
+                  <button class="action-button map-compare-toggle" id="compare-map-toggle" type="button" aria-pressed="false">Select to compare</button>
                 </div>
               </div>
               <div class="map-wrap">
@@ -176,10 +179,12 @@
                   </label>
                   <label class="layer-option"><input type="radio" name="map-layer" value="boundaries"><span class="layer-swatch boundary-swatch"></span><span>Administrative boundaries</span><span class="layer-state"></span></label>
                   <label class="layer-option selected" title="Loading verified municipal Census data"><input id="population-layer-radio" type="radio" name="map-layer" value="population" checked disabled><span class="layer-swatch population-swatch"></span><span>Population density</span><span class="layer-state">LOADING</span></label>
+                  <label class="layer-option unavailable" title="Loading Census population change for 2011–2022"><input type="radio" name="map-layer" value="growth" disabled><span class="layer-swatch growth-swatch"></span><span>Population growth · 2011–2022</span><span class="layer-state">LOADING</span></label>
                   <label class="layer-option unavailable" title="Loading Stats SA provincial unemployment estimates"><input type="radio" name="map-layer" value="unemployment" disabled><span class="layer-swatch unemployment-swatch"></span><span>Unemployment · province</span><span class="layer-state">LOADING</span></label>
                   <label class="layer-option unavailable" title="Treasury facts load in municipality profiles on demand; no compatible nationwide finance measure is loaded for map shading"><input type="radio" name="map-layer" value="finance" disabled><span class="layer-swatch muted-swatch"></span><span>Municipal finance</span><span class="layer-state">NO MAP DATA</span></label>
                   <label class="layer-option unavailable" title="Loading Stats SA municipal electricity-for-lighting data"><input type="radio" name="map-layer" value="electricity" disabled><span class="layer-swatch services-swatch"></span><span>Electricity for household lighting</span><span class="layer-state">LOADING</span></label>
                   <label class="layer-option unavailable" title="Loading verified municipal Census data"><input id="water-layer-radio" type="radio" name="map-layer" value="water" disabled><span class="layer-swatch services-swatch"></span><span>Water scheme household share</span><span class="layer-state">LOADING</span></label>
+                  <label class="layer-option unavailable" title="No complete, period-compatible municipal infrastructure indicator is currently loaded"><input type="radio" name="map-layer" value="infrastructure" disabled><span class="layer-swatch muted-swatch"></span><span>Infrastructure</span><span class="layer-state">NO MAP DATA</span></label>
                   <label class="layer-option unavailable" title="Loading Stats SA province-level GDP-R data"><input type="radio" name="map-layer" value="economy" disabled><span class="layer-swatch population-swatch"></span><span>Economic activity · province</span><span class="layer-state">LOADING</span></label>
                 </div>
                 <div class="map-overlay map-legend">
@@ -198,6 +203,11 @@
                 <span>Source: geoBoundaries · OCHA ROSEA / Municipal Demarcation Board</span>
                 <a href="https://www.geoboundaries.org/" target="_blank" rel="noreferrer">Source &amp; licence ↗</a>
               </div>
+              <section class="map-compare-panel" id="map-compare-panel" aria-label="Municipalities selected for comparison" hidden>
+                <div><span class="panel-kicker">MAP COMPARISON</span><p id="map-compare-status">Select two or three municipalities on the map.</p></div>
+                <div class="map-compare-list" id="map-compare-list"></div>
+                <button class="action-button" id="compare-map-action" type="button" disabled>Compare selected</button>
+              </section>
             </div>
 
             <section class="panel focus-panel" id="focus-panel">
@@ -266,7 +276,8 @@
                 <div class="profile-pin">⌖</div>
                 <div><h2 id="profile-name">Select a municipality</h2><p id="profile-location">Choose a boundary on the map or search</p></div>
               </div>
-              <div class="profile-code-row"><span>BOUNDARY REFERENCE</span><code id="profile-code">—</code></div>
+              <div class="profile-code-row"><span>OFFICIAL MUNICIPAL CODE</span><code id="profile-code">Data unavailable</code></div>
+              <div class="profile-code-row"><span>UNIQUE BOUNDARY ID · GEOBOUNDARIES</span><code id="profile-boundary-id">—</code></div>
               <div class="profile-divider"></div>
               <div class="profile-stat-grid">
                 <div><span>POPULATION · CENSUS 2022</span><strong id="profile-population">Loading…</strong><small id="profile-population-note">Stats SA municipal profile</small></div>
@@ -275,6 +286,8 @@
                 <div><span>CIVICSCORE</span><strong class="unscored">NOT SCORED</strong><small>Insufficient verified data</small></div>
               </div>
               <div class="profile-period"><span class="status-dot muted" id="profile-status-dot"></span><span id="profile-indicator-status">LOADING VERIFIED INDICATORS</span><span class="period-spacer"></span><span id="profile-indicator-period">—</span></div>
+              <div class="geography-children" id="geography-children" hidden></div>
+              <button class="action-button open-profile-button" id="open-municipality-profile" type="button" disabled>Open Municipality Profile ↗</button>
             </section>
 
             <section class="panel detail-panel" id="detail-panel">

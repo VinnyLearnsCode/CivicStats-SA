@@ -8,6 +8,7 @@ const state = {
   censusMapRequestId: 0,
   censusMapError: null,
   censusMapLoading: false,
+  populationGrowthLayerAvailable: false,
   provincialEconomyData: null,
   economyMapYear: 2024,
   economyMapRequestId: 0,
@@ -50,6 +51,16 @@ const state = {
   comparisonRequestId: 0,
   comparisonErrors: new Map(),
   collections: new Map(),
+  geographies: [],
+  comparisonMode: false,
+  comparisonSelections: [],
+  searchMatches: [],
+  searchActiveIndex: -1,
+  searchGeneration: 0,
+  searchDebounceTimer: null,
+  selectionLayer: null,
+  nationalBounds: null,
+  mapResizeObserver: null,
   map: null,
   boundaryLayer: null,
   toastTimer: null
@@ -64,6 +75,9 @@ const tabContent = {
       ["Province", "province"],
       ["District", "district"],
       ["Boundary level", "level"],
+      ["Municipal classification", "classification"],
+      ["Official municipal code", "code"],
+      ["Municipal seat", "seat"],
       ["Calculated area", "area"],
       ["Source vintage", "vintage"]
     ]
@@ -143,6 +157,7 @@ const detailBody = document.querySelector("#detail-body");
 const toast = document.querySelector("#toast");
 const searchInput = document.querySelector("#global-search");
 const searchResults = document.querySelector("#search-results");
+const searchClear = document.querySelector("#clear-search");
 const sectionTabs = document.querySelector("#section-tabs");
 const workspaceGrid = document.querySelector("#workspace-grid");
 const alternateView = document.querySelector("#alternate-view");
@@ -224,6 +239,10 @@ function normalizeStaticName(value) {
     .replace(/\b(local|district|metropolitan)?\s*municipality\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function canonicalProvinceName(value) {
+  return normalizeStaticName(value) === "nothern cape" ? "Northern Cape" : value;
 }
 
 async function loadStaticData() {
@@ -378,6 +397,9 @@ async function getStaticApiResponse(path) {
         censusCode: census.muni_code,
         year,
         population,
+        populationGrowthPercent: Number.isFinite(census.growth_rate_2011_to_2022)
+          ? census.growth_rate_2011_to_2022
+          : null,
         households,
         waterSchemeHouseholds,
         waterSchemeSharePercent: Number(((waterSchemeHouseholds / households) * 100).toFixed(2)),
@@ -585,35 +607,95 @@ function geometryAreaKm2(geometry) {
   return Number.isFinite(area) && area > 0 ? Number(area.toFixed(1)) : null;
 }
 
-function buildMunicipalityDirectory(municipalities, districts, provinces) {
+function findContainingFeature(feature, collection) {
+  const point = representativePoint(feature);
+  return collection?.features.find((candidate) =>
+    point && pointInGeometry(point, candidate.geometry)
+  ) ?? null;
+}
+
+function buildMunicipalityDirectory(municipalities, districts, provinces, censusData) {
   return municipalities.features.map((feature) => {
-    const point = representativePoint(feature);
-    const findParent = (collection) =>
-      collection.features.find((candidate) =>
-        point && pointInGeometry(point, candidate.geometry)
-      )?.properties.shapeName ?? null;
-    return {
+    const province = findContainingFeature(feature, provinces);
+    const district = findContainingFeature(feature, districts);
+    const name = feature.properties.shapeName;
+    const districtName = district?.properties.shapeName ?? null;
+    const municipality = {
       id: feature.properties.shapeID,
-      name: feature.properties.shapeName,
+      name,
       level: feature.properties.shapeType,
-      province: findParent(provinces),
-      district: findParent(districts),
+      province: canonicalProvinceName(province?.properties.shapeName ?? null),
+      provinceId: province?.properties.shapeID ?? null,
+      district: districtName,
+      districtId: district?.properties.shapeID ?? null,
+      category: districtName === name
+        ? "Category A · Metropolitan municipality"
+        : "Category B · Local municipality",
       areaKm2: geometryAreaKm2(feature.geometry),
       areaMethod: "Approximate spherical area calculated from the geoBoundaries polygon."
+    };
+    return {
+      ...municipality,
+      officialCode: staticCensusRecord(municipality, censusData)?.muni_code ?? null
     };
   });
 }
 
+function buildGeographyDirectory(collections, municipalities) {
+  const municipalityById = new Map(municipalities.map((item) => [item.id, item]));
+  const metropolitanNames = new Set(municipalities
+    .filter((item) => item.category?.startsWith("Category A"))
+    .map((item) => item.name));
+  const geographies = [];
+  for (const [level, collection] of collections) {
+    for (const feature of collection.features) {
+      const { shapeID: id, shapeName: rawName } = feature.properties;
+      const name = level === "ADM1" ? canonicalProvinceName(rawName) : rawName;
+      if (level === "ADM3") {
+        const municipality = municipalityById.get(id);
+        if (municipality) geographies.push(municipality);
+        continue;
+      }
+      const province = level === "ADM1" ? feature : findContainingFeature(
+        feature,
+        collections.get("ADM1")
+      );
+      const isMetro = metropolitanNames.has(name);
+      geographies.push({
+        id,
+        name,
+        level,
+        province: canonicalProvinceName(province?.properties.shapeName ?? null),
+        provinceId: level === "ADM1" ? id : province?.properties.shapeID ?? null,
+        district: level === "ADM2" ? name : null,
+        districtId: level === "ADM2" ? id : null,
+        officialCode: null,
+        category: level === "ADM1"
+          ? "Province"
+          : isMetro
+            ? "Category A · Metropolitan municipality"
+            : "Category C · District municipality",
+        areaKm2: geometryAreaKm2(feature.geometry),
+        areaMethod: "Approximate spherical area calculated from the geoBoundaries polygon."
+      });
+    }
+  }
+  return geographies;
+}
+
 async function loadStaticWorkspaceData() {
-  const [sources, provinces, districts, collection] = await Promise.all([
+  const [sources, provinces, districts, collection, censusData] = await Promise.all([
     getStaticJson("assets/data-sources.json"),
     getStaticJson("assets/geojson/south-africa-adm1.geojson"),
     getStaticJson("assets/geojson/south-africa-adm2.geojson"),
-    getStaticJson("assets/geojson/south-africa-adm3.geojson")
+    getStaticJson("assets/geojson/south-africa-adm3.geojson"),
+    loadStaticData()
   ]);
   for (const [level, boundaries] of [["ADM1", provinces], ["ADM2", districts], ["ADM3", collection]]) {
     state.collections.set(level, boundaries);
   }
+  const municipalityDirectory = buildMunicipalityDirectory(collection, districts, provinces, censusData);
+  const collections = new Map([["ADM1", provinces], ["ADM2", districts], ["ADM3", collection]]);
   return {
     health: {
       boundaryLevels: {
@@ -623,7 +705,8 @@ async function loadStaticWorkspaceData() {
       }
     },
     sources,
-    municipalities: buildMunicipalityDirectory(collection, districts, provinces),
+    municipalities: municipalityDirectory,
+    geographies: buildGeographyDirectory(collections, municipalityDirectory),
     collection
   };
 }
@@ -633,13 +716,20 @@ async function loadWorkspaceData() {
     return loadStaticWorkspaceData();
   }
   try {
-    const [health, sourceResponse, municipalityResponse, collection] = await Promise.all([
+    const [health, sourceResponse, municipalityResponse, geographyResponse, collection] = await Promise.all([
       getJson("/api/health"),
       getJson("/api/sources"),
       getJson("/api/municipalities"),
+      getJson("/api/geographies"),
       getJson("/api/geo/ADM3")
     ]);
-    return { health, sources: sourceResponse.sources, municipalities: municipalityResponse.municipalities, collection };
+    return {
+      health,
+      sources: sourceResponse.sources,
+      municipalities: municipalityResponse.municipalities,
+      geographies: geographyResponse.geographies,
+      collection
+    };
   } catch (apiError) {
     try {
       return await loadStaticWorkspaceData();
@@ -686,14 +776,31 @@ function formatArea(areaKm2) {
 
 function updateBreadcrumb() {
   const breadcrumb = document.querySelector("#breadcrumbs");
-  const pieces = ["South Africa"];
-  if (state.selected?.province && state.selected.province !== "South Africa") pieces.push(state.selected.province);
-  if (state.selected?.district && state.selected.district !== state.selected.name) pieces.push(state.selected.district);
-  if (state.selected?.name && state.selected.name !== pieces.at(-1)) pieces.push(state.selected.name);
-  if (state.view === "sources") pieces.push("Data sources");
-  else if (state.view === "comparisons") pieces.push("Comparisons");
-  else if (state.view === "municipalities") pieces.push("Municipalities");
-  else if (state.view === "dashboard" && pieces.length === 1) pieces.push("National overview");
+  const pieces = [{ name: "South Africa", id: null }];
+  const selected = state.selected;
+  const findGeography = (id, level, name) =>
+    state.geographies.find((item) =>
+      (id && item.id === id) || (item.level === level && item.name === name)
+    );
+  if (selected?.province && selected.province !== "South Africa") {
+    const province = findGeography(selected.provinceId, "ADM1", selected.province);
+    if (province && province.id !== selected.id) pieces.push(province);
+  }
+  if (selected?.district && selected.district !== selected.name) {
+    const district = findGeography(selected.districtId, "ADM2", selected.district);
+    if (district && district.id !== selected.id && district.id !== pieces.at(-1).id) pieces.push(district);
+  }
+  if (selected && pieces.at(-1).id !== selected.id) pieces.push(selected);
+  const viewLabel = state.view === "sources"
+    ? "Data sources"
+    : state.view === "comparisons"
+      ? "Comparisons"
+      : state.view === "municipalities"
+        ? "Municipalities"
+        : state.view === "dashboard" && pieces.length === 1
+          ? "National overview"
+          : null;
+  if (viewLabel) pieces.push({ name: viewLabel, id: null });
   breadcrumb.replaceChildren();
   pieces.forEach((piece, index) => {
     if (index) {
@@ -702,9 +809,13 @@ function updateBreadcrumb() {
       separator.textContent = "/";
       breadcrumb.append(separator);
     }
-    const item = document.createElement("span");
-    item.textContent = piece;
-    if (index === pieces.length - 1) item.className = "crumb-current";
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `crumb-button${index === pieces.length - 1 ? " crumb-current" : ""}`;
+    item.textContent = piece.name;
+    if (piece.id) item.dataset.geographyId = piece.id;
+    else if (index === 0) item.dataset.geographyRoot = "true";
+    else item.disabled = true;
     breadcrumb.append(item);
   });
 }
@@ -731,6 +842,7 @@ function updateNavigation() {
 function setView(view) {
   state.view = viewCopy[view] ? view : "dashboard";
   const workspace = ["dashboard", "national", "workspace"].includes(state.view);
+  setMobileProfileOpen(false);
   workspaceGrid.hidden = !workspace;
   sectionTabs.hidden = !workspace;
   alternateView.hidden = workspace;
@@ -801,6 +913,10 @@ function renderDetail() {
       province: state.selected?.province,
       district: state.selected?.district,
       level: state.selected ? formatBoundaryLevel(state.selected.level) : null,
+      classification: state.selected?.category ?? "Data unavailable",
+      code: state.selected?.officialCode ??
+        state.censusMapRecords.get(state.selected?.id)?.censusCode ?? "Data unavailable",
+      seat: "Data unavailable",
       area: state.selected?.areaKm2 == null ? null : formatArea(state.selected.areaKm2),
       vintage: state.selected ? "2020 · geoBoundaries" : null
     };
@@ -2804,13 +2920,18 @@ function updateProfile(selected) {
     .filter((name, index, list) => name && name !== selected.name && list.indexOf(name) === index)
     .join(" · ");
   profileLocation.textContent = location || formatBoundaryLevel(selected.level);
-  document.querySelector("#profile-code").textContent = selected.id || "Not published";
-  document.querySelector("#profile-type").textContent = formatBoundaryLevel(selected.level).toUpperCase();
+  document.querySelector("#profile-code").textContent = selected.officialCode ??
+    state.censusMapRecords.get(selected.id)?.censusCode ?? "Data unavailable";
+  document.querySelector("#profile-boundary-id").textContent = selected.id || "—";
+  document.querySelector("#profile-type").textContent =
+    (selected.category ?? formatBoundaryLevel(selected.level)).toUpperCase();
   document.querySelector("#profile-area").textContent = formatArea(selected.areaKm2);
   document.querySelector("#profile-area-note").textContent = selected.areaKm2 == null
     ? "Not calculated for this boundary"
     : "Spherical GeoJSON calculation · approximate";
   updateBreadcrumb();
+  document.querySelector("#open-municipality-profile").disabled = selected.level !== "ADM3";
+  void renderGeographyChildren(selected);
   renderDetail();
   updatePageHeading();
   void updateProfileSummary(selected);
@@ -2822,6 +2943,73 @@ function updateProfile(selected) {
       if (isSelected && state.boundaryLevel !== "ADM1") layer.bringToFront();
     });
   }
+}
+
+function renderGeographyChildren(selected) {
+  const container = document.querySelector("#geography-children");
+  if (!container) return;
+  const childLevel = selected.level === "ADM1" ? "ADM2" : selected.level === "ADM2" ? "ADM3" : null;
+  if (!childLevel) {
+    container.hidden = true;
+    container.replaceChildren();
+    return;
+  }
+  const children = state.geographies.filter((item) =>
+    item.level === childLevel &&
+    (childLevel === "ADM2" ? item.provinceId === selected.id : item.districtId === selected.id)
+  );
+  const heading = document.createElement("span");
+  heading.className = "panel-kicker";
+  heading.textContent = childLevel === "ADM2"
+    ? "DISTRICTS & METROS IN THIS PROVINCE"
+    : "LOCAL & METRO MUNICIPALITIES IN THIS DISTRICT";
+  const list = document.createElement("div");
+  list.className = "geography-child-list";
+  children.forEach((child) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "geography-child";
+    button.dataset.geographyId = child.id;
+    const name = document.createElement("strong");
+    name.textContent = child.name;
+    const category = document.createElement("small");
+    category.textContent = child.category;
+    button.append(name, category);
+    list.append(button);
+  });
+  container.replaceChildren(heading, list);
+  container.hidden = false;
+}
+
+function clearGeographySelection() {
+  state.selected = null;
+  setMobileProfileOpen(false);
+  state.profileSummaryRequestId += 1;
+  profileName.textContent = "South Africa";
+  profileLocation.textContent = "Select a province, district or municipality";
+  document.querySelector("#profile-type").textContent = "NATIONAL OVERVIEW";
+  document.querySelector("#profile-code").textContent = "Data unavailable";
+  document.querySelector("#profile-boundary-id").textContent = "—";
+  document.querySelector("#profile-area").textContent = "Data unavailable";
+  document.querySelector("#profile-area-note").textContent = "Select a geographic boundary";
+  document.querySelector("#profile-population").textContent = "Data unavailable";
+  document.querySelector("#profile-population-note").textContent = "Select a municipality for Census indicators";
+  document.querySelector("#profile-unemployment").textContent = "Data unavailable";
+  document.querySelector("#profile-unemployment-note").textContent = "Select a province or geography in a province";
+  document.querySelector("#profile-indicator-status").textContent = "SELECT A GEOGRAPHY";
+  document.querySelector("#profile-indicator-period").textContent = "—";
+  document.querySelector("#profile-status-dot").classList.add("muted");
+  document.querySelector("#source-indicator-dot").classList.remove("loaded");
+  document.querySelector("#source-indicator-label").textContent = "NOT SELECTED";
+  document.querySelector("#source-summary-note").textContent = "Choose a boundary to view available data.";
+  document.querySelector("#open-municipality-profile").disabled = true;
+  document.querySelector("#geography-children").hidden = true;
+  document.querySelector("#geography-children").replaceChildren();
+  document.querySelector("#map-location").textContent = "SOUTH AFRICA · 9 PROVINCES";
+  updateBreadcrumb();
+  renderDetail();
+  updatePageHeading();
+  refreshMapStyles();
 }
 
 async function updateProfileSummary(selected) {
@@ -2844,6 +3032,11 @@ async function updateProfileSummary(selected) {
   periodLabel.textContent = "—";
   statusDot.classList.add("muted");
 
+  if (selected.level !== "ADM3") {
+    population.textContent = "Data unavailable";
+    populationNote.textContent = "The loaded Census profile is municipality-level only";
+  }
+
   const censusRequest = selected.level === "ADM3"
     ? getMunicipalityCensus(selected.id)
     : Promise.resolve(null);
@@ -2858,6 +3051,9 @@ async function updateProfileSummary(selected) {
   let censusPeriod = "";
   if (censusResult.status === "fulfilled" && censusResult.value?.census) {
     const indicators = censusResult.value.census.indicators;
+    const officialCode = censusResult.value.census.officialCode;
+    selected.officialCode = officialCode;
+    document.querySelector("#profile-code").textContent = officialCode || "Data unavailable";
     if (Number.isFinite(indicators.total_pop_2022) && hasVerifiedCensusSource(censusResult.value)) {
       population.textContent = formatCensusNumber(indicators.total_pop_2022);
       populationNote.textContent = `${censusResult.value.source.publisher} · Census 2022`;
@@ -2871,7 +3067,7 @@ async function updateProfileSummary(selected) {
         : "A verified Stats SA source reference is missing";
     }
   } else if (selected.level !== "ADM3") {
-    population.textContent = "Municipal only";
+    population.textContent = "Data unavailable";
     populationNote.textContent = "Census profile figures are available at municipality level";
   } else {
     population.textContent = "Unavailable";
@@ -2933,22 +3129,58 @@ function selectedStyle() {
   return { color: "#57c7c1", weight: 2, opacity: 1, fillColor: "#40726c", fillOpacity: 0.43 };
 }
 
+function comparisonStyle() {
+  return { color: "#c19a5a", weight: 2, opacity: 0.95, fillColor: "#8b7040", fillOpacity: 0.38 };
+}
+
+function isComparisonSelection(feature) {
+  return state.comparisonSelections.includes(feature.properties.shapeID);
+}
+
+function styleForFeature(feature) {
+  if (feature.properties.shapeID === state.selected?.id) return selectedStyle();
+  if (isComparisonSelection(feature)) return comparisonStyle();
+  return mapStyle(feature);
+}
+
+function refreshSelectionLayer() {
+  if (!state.map) return;
+  if (state.selectionLayer) {
+    state.map.removeLayer(state.selectionLayer);
+    state.selectionLayer = null;
+  }
+  const selected = state.selected;
+  if (!selected || selected.level === state.boundaryLevel) return;
+  const feature = state.collections.get(selected.level)?.features.find((item) =>
+    item.properties.shapeID === selected.id
+  );
+  if (!feature) return;
+  state.selectionLayer = L.geoJSON(feature, {
+    style: selectedStyle,
+    interactive: false
+  }).addTo(state.map);
+}
+
 function mapIndicatorValue(feature) {
   if (state.mapLayer === "unemployment") {
     if (feature.properties.shapeType !== "ADM1") return null;
-    return state.labourMapRecords.get(feature.properties.shapeName)?.officialRate ?? null;
+    const province = canonicalProvinceName(feature.properties.shapeName);
+    return state.labourMapRecords.get(province)?.officialRate ?? null;
   }
   if (state.mapLayer === "economy") {
     if (feature.properties.shapeType !== "ADM1") return null;
+    const province = canonicalProvinceName(feature.properties.shapeName);
     return state.provincialEconomyData?.records
-      .find((record) => record.province === feature.properties.shapeName)?.gdpContributionPercent ?? null;
+      .find((record) => record.province === province)?.gdpContributionPercent ?? null;
   }
   if (state.boundaryLevel !== "ADM3" || feature.properties.shapeType !== "ADM3") return null;
   const record = state.censusMapRecords.get(feature.properties.shapeID);
   if (!record) return null;
   return state.mapLayer === "population"
     ? record.populationDensityPerKm2
-    : state.mapLayer === "water"
+    : state.mapLayer === "growth"
+      ? record.populationGrowthPercent
+      : state.mapLayer === "water"
       ? record.waterSchemeSharePercent
       : state.mapLayer === "electricity"
         ? record.electricityLightingSharePercent
@@ -2966,11 +3198,13 @@ function mapIndicatorBreaks() {
     ? "officialRate"
     : state.mapLayer === "economy"
       ? "gdpContributionPercent"
-    : state.mapLayer === "population"
-      ? "populationDensityPerKm2"
-      : state.mapLayer === "electricity"
-        ? "electricityLightingSharePercent"
-        : "waterSchemeSharePercent";
+      : state.mapLayer === "population"
+        ? "populationDensityPerKm2"
+        : state.mapLayer === "growth"
+          ? "populationGrowthPercent"
+          : state.mapLayer === "electricity"
+            ? "electricityLightingSharePercent"
+            : "waterSchemeSharePercent";
   const values = activeMapRecords()
     .map((record) => record[valueKey])
     .filter((value) => typeof value === "number" && Number.isFinite(value))
@@ -2985,7 +3219,9 @@ function mapStyle(feature) {
   const style = baseStyle(feature);
   if (state.mapLayer === "boundaries") return style;
   const value = mapIndicatorValue(feature);
-  if (value === null) return { ...style, fillOpacity: 0.05 };
+  if (value === null) {
+    return { ...style, color: "#59645e", fillColor: "#303936", fillOpacity: 0.58 };
+  }
   const breaks = mapIndicatorBreaks();
   const colors = ["#29463d", "#3c6252", "#61836a", "#9d9861", "#c1814f"];
   const colorIndex = breaks.findIndex((limit) => value <= limit);
@@ -2998,8 +3234,18 @@ function mapStyle(feature) {
 }
 
 function mapTooltip(feature) {
-  const name = feature.properties.shapeName;
+  const name = feature.properties.shapeType === "ADM1"
+    ? canonicalProvinceName(feature.properties.shapeName)
+    : feature.properties.shapeName;
   if (state.mapLayer === "boundaries") return name;
+  if (state.mapLayer === "growth") {
+    if (feature.properties.shapeType !== "ADM3") return `${name} · municipality values only`;
+    const record = state.censusMapRecords.get(feature.properties.shapeID);
+    const growth = record?.populationGrowthPercent;
+    return Number.isFinite(growth)
+      ? `${name} · reported Census population growth 2011–2022: ${formatCensusNumber(growth, 1)}%`
+      : `${name} · Census population growth unavailable for 2011–2022`;
+  }
   if (state.mapLayer === "unemployment") {
     if (feature.properties.shapeType !== "ADM1") return `${name} · select Provinces to show provincial estimates`;
     const record = state.labourMapRecords.get(name);
@@ -3040,6 +3286,8 @@ function renderMapLegend() {
     heading.textContent = `OFFICIAL UNEMPLOYMENT · ${period}`;
   } else if (state.mapLayer === "economy") {
     heading.textContent = `GDP CONTRIBUTION · ${state.economyMapYear}`;
+  } else if (state.mapLayer === "growth") {
+    heading.textContent = "POPULATION GROWTH · CENSUS 2011–2022";
   } else {
     heading.textContent = state.mapLayer === "population"
       ? `POPULATION DENSITY · CENSUS ${state.censusMapYear}`
@@ -3096,7 +3344,7 @@ function renderMapLegend() {
     const range = document.createElement("span");
     const upper = breaks[index] ?? values.at(-1);
     const precision = 1;
-    const suffix = state.mapLayer === "population" ? "" : "%";
+    const suffix = state.mapLayer === "population" ? " people/km²" : "%";
     if (index === 0) {
       range.textContent = `≤ ${formatCensusNumber(upper, precision)}${suffix}`;
     } else {
@@ -3106,18 +3354,61 @@ function renderMapLegend() {
     row.append(swatch, range);
     items.append(row);
   });
+  const layerMetadata = state.mapLayer === "unemployment"
+    ? {
+      detail: `Source: Stats SA QLFS · ${state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter}; unit: percent of labour force; provincial estimate.`,
+      updated: `Source release ${state.labourData?.source.releaseDate ?? "date unavailable"}`,
+      url: state.labourData?.source.sourceUrl
+    }
+    : state.mapLayer === "economy"
+      ? {
+        detail: `Source: Stats SA GDP-R P0441.2 · ${state.economyMapYear}; unit: percent of national nominal GDP; province-level only.`,
+        updated: `Publication ${state.provincialEconomyData?.source.publicationDate ?? "date unavailable"}`,
+        url: state.provincialEconomyData?.source.url
+      }
+      : state.mapLayer === "growth"
+        ? {
+          detail: "Source: Stats SA Census · reported population change, 2011–2022; unit: percent.",
+          updated: "Source release 2023-10-10",
+          url: "https://census.statssa.gov.za/assets/documents/2022/Provinces_at_a_Glance.pdf"
+        }
+        : state.mapLayer === "population"
+          ? {
+            detail: `Source: Stats SA Census ${state.censusMapYear}; unit: people/km², calculated from reported population and source area.`,
+            updated: "Source release 2023-10-10",
+            url: "https://census.statssa.gov.za/assets/documents/2022/Provinces_at_a_Glance.pdf"
+          }
+          : state.mapLayer === "electricity"
+            ? {
+              detail: `Source: Stats SA Census municipal fact sheet · ${state.censusMapYear}; unit: percent of households reporting electricity as main lighting source, not connection or reliability.`,
+              updated: "Source release date not supplied in bundled metadata",
+              url: "https://census.statssa.gov.za/assets/documents/2022/Census_2022_Municipal_factsheet-Web.pdf"
+            }
+            : {
+              detail: `Source: Stats SA Census ${state.censusMapYear}; unit: percent of households reporting water scheme as source.`,
+              updated: "Source release 2023-10-10",
+              url: "https://census.statssa.gov.za/assets/documents/2022/Provinces_at_a_Glance.pdf"
+            };
+  const missing = document.createElement("span");
+  missing.className = "map-legend-range";
+  const missingSwatch = document.createElement("i");
+  missingSwatch.className = "map-legend-swatch missing-swatch";
+  const missingLabel = document.createElement("span");
+  missingLabel.textContent = "Data unavailable";
+  missing.append(missingSwatch, missingLabel);
   const note = document.createElement("span");
   note.className = "legend-note";
-  note.textContent = state.mapLayer === "unemployment"
-    ? "Stats SA QLFS · province survey estimate; not municipal data."
-    : state.mapLayer === "economy"
-      ? "Stats SA GDP-R · provincial share of national nominal GDP; not municipal output."
-    : state.mapLayer === "population"
-      ? "Stats SA Census · derived population ÷ source area."
-      : state.mapLayer === "electricity"
-        ? "Stats SA Census · household share reporting electricity as the main lighting source; not connection or reliability."
-        : "Stats SA Census · calculated share of households reporting water scheme.";
-  items.append(note);
+  note.textContent = `${layerMetadata.detail} ${layerMetadata.updated}. Neutral fill indicates missing data.`;
+  items.append(missing, note);
+  if (layerMetadata.url) {
+    const sourceLink = document.createElement("a");
+    sourceLink.className = "legend-source-link";
+    sourceLink.href = layerMetadata.url;
+    sourceLink.target = "_blank";
+    sourceLink.rel = "noopener noreferrer";
+    sourceLink.textContent = "Open original source ↗";
+    items.append(sourceLink);
+  }
 }
 
 function setLabourQuarter(quarter) {
@@ -3255,6 +3546,7 @@ async function loadProvincialGdpData(year = state.economyMapYear) {
 
 function updateMapLayerControls() {
   const censusAvailable = state.censusMapRecords.size === state.municipalities.length && state.municipalities.length > 0;
+  const growthAvailable = censusAvailable && state.populationGrowthLayerAvailable;
   const unemploymentAvailable = state.labourMapRecords.size === 9;
   const provincialGdpAvailable = state.provincialEconomyData?.year === state.economyMapYear &&
     state.provincialEconomyData.records.length === 9;
@@ -3275,13 +3567,15 @@ function updateMapLayerControls() {
   document.querySelectorAll('input[name="map-layer"]').forEach((input) => {
     const thematic = input.value !== "boundaries";
     const provinceOnly = input.value === "unemployment" || input.value === "economy";
-    const municipalOnly = ["population", "water", "electricity"].includes(input.value);
+    const municipalOnly = ["population", "growth", "water", "electricity"].includes(input.value);
     const supported = provinceOnly || municipalOnly;
-    const profileDataOnly = input.value === "finance";
+    const profileDataOnly = ["finance", "infrastructure"].includes(input.value);
     const available = input.value === "unemployment"
       ? unemploymentAvailable
       : input.value === "economy"
         ? provincialGdpAvailable
+        : input.value === "growth"
+          ? growthAvailable
         : input.value === "electricity"
           ? electricityAvailable
           : municipalOnly
@@ -3305,7 +3599,9 @@ function updateMapLayerControls() {
     label.title = !thematic
       ? "Official administrative boundary geometry"
       : !supported
-        ? "Treasury finance facts load in municipality profiles on demand; no compatible finance map measure is loaded"
+        ? input.value === "finance"
+          ? "Treasury finance facts load on demand; no complete, period-compatible municipal measure is loaded for map shading"
+          : "No complete, period-compatible municipal infrastructure indicator is currently loaded"
         : !available
             ? error
               ? `Verified source data unavailable: ${error}`
@@ -3322,7 +3618,9 @@ function updateMapLayerControls() {
                   : `Statistics South Africa GDP-R ${state.economyMapYear} provincial GDP contribution`
                 : input.value === "electricity"
                   ? `Stats SA Census ${state.censusMapYear} household share reporting electricity as the main lighting source; not connection status or reliability`
-                : `Statistics South Africa Census ${state.censusMapYear} municipal data`;
+                  : input.value === "growth"
+                    ? "Statistics South Africa Census reported population growth, 2011–2022"
+                    : `Statistics South Africa Census ${state.censusMapYear} municipal data`;
     label.classList.toggle("unavailable", thematic && !enabled);
     label.classList.toggle("selected", input.value === state.mapLayer);
     const status = label.querySelector(".layer-state");
@@ -3339,9 +3637,8 @@ function updateMapLayerControls() {
 }
 
 function refreshMapStyles() {
-  state.boundaryLayer?.setStyle((feature) =>
-    feature.properties.shapeID === state.selected?.id ? selectedStyle() : mapStyle(feature)
-  );
+  state.boundaryLayer?.setStyle(styleForFeature);
+  refreshSelectionLayer();
   renderMapLegend();
   updateMapLayerControls();
 }
@@ -3374,6 +3671,9 @@ async function loadCensusMapData(year) {
       throw new Error(`Census ${year} data did not match every municipal boundary.`);
     }
     state.censusMapRecords = records;
+    state.populationGrowthLayerAvailable = [...records.values()].some((record) =>
+      Number.isFinite(record.populationGrowthPercent)
+    );
     state.censusMapError = null;
     state.censusMapLoading = false;
     refreshMapStyles();
@@ -3382,7 +3682,8 @@ async function loadCensusMapData(year) {
     if (requestId !== state.censusMapRequestId) return;
     state.censusMapError = error.message;
     state.censusMapLoading = false;
-    if (["population", "water", "electricity"].includes(state.mapLayer)) state.mapLayer = "boundaries";
+    state.populationGrowthLayerAvailable = false;
+    if (["population", "growth", "water", "electricity"].includes(state.mapLayer)) state.mapLayer = "boundaries";
     refreshMapStyles();
     renderNationalMetrics();
   }
@@ -3391,16 +3692,13 @@ async function loadCensusMapData(year) {
 function setMapLayer(collection) {
   if (state.boundaryLayer) state.map.removeLayer(state.boundaryLayer);
   state.boundaryLayer = L.geoJSON(collection, {
-    style: (feature) => feature.properties.shapeID === state.selected?.id
-      ? selectedStyle()
-      : mapStyle(feature),
+    style: styleForFeature,
     onEachFeature: (feature, layer) => {
-      const name = feature.properties.shapeName;
       layer.bindTooltip(mapTooltip(feature), { sticky: true, direction: "top" });
       layer.on({
         mouseover: () => {
           layer.setTooltipContent(mapTooltip(feature));
-          if (feature.properties.shapeID !== state.selected?.id) {
+          if (feature.properties.shapeID !== state.selected?.id && !isComparisonSelection(feature)) {
             layer.setStyle({
               ...mapStyle(feature),
               color: "#b7c5bc",
@@ -3410,79 +3708,185 @@ function setMapLayer(collection) {
           }
         },
         mouseout: () => {
-          layer.setStyle(feature.properties.shapeID === state.selected?.id
-            ? selectedStyle()
-            : mapStyle(feature));
+          layer.setStyle(styleForFeature(feature));
         },
         click: () => {
-          const item = state.municipalities.find((municipality) =>
-            municipality.id === feature.properties.shapeID
+          if (state.comparisonMode) {
+            if (feature.properties.shapeType !== "ADM3") {
+              showToast("Map comparison currently supports municipalities only. Switch to Municipalities to select places.");
+              return;
+            }
+            toggleMapComparison(feature.properties.shapeID);
+            return;
+          }
+          const item = state.geographies.find((geography) =>
+            geography.id === feature.properties.shapeID
           );
-          const selected = item ?? {
-            id: feature.properties.shapeID,
-            name,
-            level: feature.properties.shapeType,
-            province: feature.properties.shapeType === "ADM1" ? name : null,
-            district: feature.properties.shapeType === "ADM2" ? name : null
-          };
-          updateProfile(selected);
-          if (state.view !== "dashboard") setView("dashboard");
+          if (item) void selectGeography(item);
         }
       });
     }
   }).addTo(state.map);
-  if (state.selected && state.boundaryLevel !== "ADM1") {
-    state.boundaryLayer.eachLayer((layer) => {
-      if (layer.feature.properties.shapeID === state.selected.id) layer.setStyle(selectedStyle());
-    });
-  }
   document.querySelector("#boundary-count").textContent =
-    `${collection.features.length} ${state.boundaryLevel === "ADM1" ? "provinces" : "boundary features"}`;
+    `${collection.features.length} ${state.boundaryLevel === "ADM1" ? "provinces" : state.boundaryLevel === "ADM2" ? "districts & metros" : "municipal boundaries"}`;
   updateMapLayerControls();
   renderMapLegend();
   const bounds = state.boundaryLayer.getBounds();
+  if (state.boundaryLevel === "ADM3" && bounds.isValid()) state.nationalBounds = bounds;
   if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
+  refreshSelectionLayer();
+}
+
+async function ensureBoundaryCollection(level) {
+  if (!state.collections.has(level)) {
+    const collection = await getJson(`/api/geo/${level}`);
+    if (collection.type !== "FeatureCollection" || !Array.isArray(collection.features) ||
+      collection.features.some((feature) =>
+        !feature.properties?.shapeID || feature.properties.shapeType !== level
+      )) {
+      throw new Error(`The ${level} boundary response is invalid or missing unique feature IDs.`);
+    }
+    state.collections.set(level, collection);
+  }
+  return state.collections.get(level);
 }
 
 async function changeBoundaryLevel(level) {
-  if (!state.collections.has(level)) {
-    const collection = await getJson(`/api/geo/${level}`);
-    state.collections.set(level, collection);
-  }
+  const collection = await ensureBoundaryCollection(level);
   state.boundaryLevel = level;
   const provinceLayer = ["unemployment", "economy"].includes(state.mapLayer);
-  const municipalityLayer = ["population", "water", "electricity"].includes(state.mapLayer);
+  const municipalityLayer = ["population", "growth", "water", "electricity"].includes(state.mapLayer);
   if ((level !== "ADM1" && provinceLayer) || (level !== "ADM3" && municipalityLayer)) {
     state.mapLayer = "boundaries";
   }
-  if (level === "ADM1") void loadProvincialGdpData(state.economyMapYear);
-  setMapLayer(state.collections.get(level));
+  if (level === "ADM1") {
+    void loadProvincialGdpData(state.economyMapYear);
+    void loadProvincialLabourData();
+  }
+  setMapLayer(collection);
+}
+
+async function selectGeography(item, { focus = true } = {}) {
+  if (!item?.id || !["ADM1", "ADM2", "ADM3"].includes(item.level)) {
+    showToast("This search result does not have a supported geographic boundary.");
+    return;
+  }
+  let selected = state.geographies.find((geography) => geography.id === item.id) ?? item;
+  try {
+    const collection = await ensureBoundaryCollection(selected.level);
+    const feature = collection.features.find((candidate) =>
+      candidate.properties.shapeID === selected.id
+    );
+    if (!feature) throw new Error("The selected geographic ID is not in its boundary layer.");
+    if (selected.areaKm2 == null) {
+      selected = {
+        ...selected,
+        areaKm2: geometryAreaKm2(feature.geometry),
+        areaMethod: "Approximate spherical area calculated from the geoBoundaries polygon."
+      };
+    }
+    if (state.boundaryLevel !== selected.level) {
+      document.querySelector("#boundary-level").value = selected.level;
+      await changeBoundaryLevel(selected.level);
+    }
+    updateProfile(selected);
+    document.querySelector("#map-location").textContent =
+      `${formatBoundaryLevel(selected.level).toUpperCase()} · ${selected.name.toLocaleUpperCase()}`;
+    if (state.view !== "dashboard") setView("dashboard");
+    if (focus && state.map) {
+      const bounds = L.geoJSON(feature).getBounds();
+      if (bounds.isValid()) {
+        const maxZoom = selected.level === "ADM1" ? 6 : selected.level === "ADM2" ? 7 : 9;
+        state.map.flyToBounds(bounds, { padding: [35, 35], maxZoom, duration: 0.6 });
+      }
+    }
+  } catch (error) {
+    showToast(`Could not open ${selected.name}: ${error.message}`);
+    return;
+  }
+  if (state.view !== "dashboard") setView("dashboard");
+  document.querySelector("#mobile-scrim").hidden = true;
+  document.body.classList.remove("mobile-nav-open");
+  setMobileProfileOpen(window.matchMedia("(max-width: 640px)").matches);
+  searchResults.hidden = true;
+}
+
+function setMobileProfileOpen(open) {
+  const toggle = document.querySelector("#mobile-profile-toggle");
+  document.body.classList.toggle("mobile-profile-open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.setAttribute("aria-label", open ? "Hide municipality information" : "Show municipality information");
+  toggle.title = open ? "Hide municipality information" : "Municipality information";
 }
 
 async function selectMunicipality(item) {
-  let selected = item;
-  if (item.areaKm2 === undefined) {
-    try {
-      const profile = await getJson(`/api/municipalities/${encodeURIComponent(item.id)}`);
-      selected = profile.municipality;
-    } catch (error) {
-      showToast(`Could not load municipality profile: ${error.message}`);
-    }
+  return selectGeography(item);
+}
+
+function renderMapComparisonSelection() {
+  const panel = document.querySelector("#map-compare-panel");
+  const toggle = document.querySelector("#compare-map-toggle");
+  const status = document.querySelector("#map-compare-status");
+  const list = document.querySelector("#map-compare-list");
+  const compareButton = document.querySelector("#compare-map-action");
+  if (!panel || !toggle || !status || !list || !compareButton) return;
+  panel.hidden = !state.comparisonMode && state.comparisonSelections.length === 0;
+  toggle.setAttribute("aria-pressed", String(state.comparisonMode));
+  toggle.textContent = state.comparisonMode ? "Done selecting" : "Select to compare";
+  status.textContent = state.comparisonMode
+    ? `Select up to three municipalities (${state.comparisonSelections.length}/3 selected).`
+    : state.comparisonSelections.length
+      ? `${state.comparisonSelections.length} municipality${state.comparisonSelections.length === 1 ? "" : "ies"} selected.`
+      : "Select two or three municipalities on the map.";
+  list.replaceChildren();
+  state.comparisonSelections.forEach((id) => {
+    const item = state.geographies.find((geography) => geography.id === id);
+    if (!item) return;
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "map-compare-chip";
+    chip.dataset.removeComparisonId = id;
+    chip.setAttribute("aria-label", `Remove ${item.name} from comparison`);
+    chip.textContent = `${item.name} ×`;
+    list.append(chip);
+  });
+  compareButton.disabled = state.comparisonSelections.length < 2;
+}
+
+function toggleMapComparison(id) {
+  const index = state.comparisonSelections.indexOf(id);
+  if (index >= 0) {
+    state.comparisonSelections.splice(index, 1);
+  } else if (state.comparisonSelections.length >= 3) {
+    showToast("Map comparison supports up to three municipalities.");
+    return;
+  } else {
+    state.comparisonSelections.push(id);
   }
-  updateProfile(selected);
+  refreshMapStyles();
+  renderMapComparisonSelection();
+}
+
+function resetMapToNational() {
   if (state.view !== "dashboard") setView("dashboard");
-  document.querySelector("#mobile-scrim").hidden = true;
-  document.body.classList.remove("mobile-profile-open", "mobile-nav-open");
+  searchInput.value = "";
+  renderSearchResults("");
+  state.comparisonMode = false;
+  state.comparisonSelections = [];
+  renderMapComparisonSelection();
   if (state.boundaryLevel !== "ADM3") {
     document.querySelector("#boundary-level").value = "ADM3";
-    await changeBoundaryLevel("ADM3");
-  }
-  if (state.map && state.boundaryLayer) {
-    state.boundaryLayer.eachLayer((layer) => {
-      if (layer.feature.properties.shapeID === item.id) {
-        state.map.flyToBounds(layer.getBounds(), { padding: [55, 55], maxZoom: 8, duration: 0.6 });
+    void changeBoundaryLevel("ADM3").then(() => {
+      clearGeographySelection();
+      if (state.map && state.nationalBounds?.isValid()) {
+        state.map.fitBounds(state.nationalBounds, { padding: [30, 30], maxZoom: 6 });
       }
-    });
+    }).catch((error) => showToast(`Could not reset the map: ${error.message}`));
+    return;
+  }
+  clearGeographySelection();
+  if (state.map && state.nationalBounds?.isValid()) {
+    state.map.fitBounds(state.nationalBounds, { padding: [30, 30], maxZoom: 6 });
   }
 }
 
@@ -3634,7 +4038,9 @@ async function loadLiveSourceData() {
 }
 
 function renderComparison() {
-  const selectedIds = [state.selected?.id ?? "", "", ""];
+  const selectedIds = state.comparisonSelections.length
+    ? [...state.comparisonSelections.slice(0, 3), "", "", ""].slice(0, 3)
+    : [state.selected?.id ?? "", "", ""];
   const selectFields = selectedIds.map((id, index) => `
     <label>GEOGRAPHY ${index + 1}
       <select class="compare-select" data-index="${index}" aria-label="Comparison municipality ${index + 1}">
@@ -3723,7 +4129,13 @@ function renderAlternateView() {
 
 function initializeComparison() {
   const selects = [...alternateView.querySelectorAll(".compare-select")];
-  if (state.selected?.id && selects[0]) selects[0].value = state.selected.id;
+  if (state.comparisonSelections.length) {
+    state.comparisonSelections.slice(0, selects.length).forEach((id, index) => {
+      selects[index].value = id;
+    });
+  } else if (state.selected?.level === "ADM3" && selects[0]) {
+    selects[0].value = state.selected.id;
+  }
   const exportButton = alternateView.querySelector("#compare-export");
   const update = () => {
     const requestId = ++state.comparisonRequestId;
@@ -3970,38 +4382,77 @@ function renderSearchResults(query) {
   if (!normalized) {
     searchResults.hidden = true;
     searchResults.replaceChildren();
+    searchInput.setAttribute("aria-expanded", "false");
+    searchInput.removeAttribute("aria-activedescendant");
+    searchClear.hidden = true;
+    state.searchMatches = [];
+    state.searchActiveIndex = -1;
     return;
   }
-  const matches = state.municipalities
-    .filter((item) => item.name.toLocaleLowerCase().includes(normalized))
-    .slice(0, 7);
+  searchClear.hidden = false;
+  const score = (item) => {
+    const name = item.name.toLocaleLowerCase();
+    const code = item.officialCode?.toLocaleLowerCase() ?? "";
+    if (name === normalized || code === normalized) return 0;
+    if (name.startsWith(normalized) || code.startsWith(normalized)) return 1;
+    if (name.includes(normalized)) return 2;
+    return 3;
+  };
+  const matches = state.geographies
+    .filter((item) => [item.name, item.province, item.district, item.officialCode]
+      .some((value) => value?.toLocaleLowerCase().includes(normalized)))
+    .sort((left, right) =>
+      score(left) - score(right) ||
+      (left.level === "ADM3" ? -1 : right.level === "ADM3" ? 1 : 0) ||
+      left.name.localeCompare(right.name)
+    )
+    .slice(0, 8);
+  state.searchMatches = matches;
+  state.searchActiveIndex = matches.length ? 0 : -1;
   searchResults.replaceChildren();
   if (!matches.length) {
     const empty = document.createElement("div");
     empty.className = "search-empty";
-    empty.textContent = "No municipality in the loaded boundaries matches that search.";
+    empty.textContent = "No province, district or municipality matches that search.";
     searchResults.append(empty);
     searchResults.hidden = false;
+    searchInput.setAttribute("aria-expanded", "true");
     return;
   }
-  matches.forEach((item) => {
+  matches.forEach((item, index) => {
     const button = document.createElement("button");
     button.className = "search-result";
     button.type = "button";
     button.setAttribute("role", "option");
+    button.id = `search-result-${index}`;
+    button.setAttribute("aria-selected", String(index === state.searchActiveIndex));
     const name = document.createElement("strong");
     name.textContent = item.name;
     const place = document.createElement("small");
-    place.textContent = [item.province, item.district].filter(Boolean).join(" · ");
+    const code = item.officialCode ? ` · ${item.officialCode}` : "";
+    place.textContent = `${formatBoundaryLevel(item.level)}${item.category ? ` · ${item.category}` : ""} · ${[item.province, item.district].filter(Boolean).join(" · ") || "South Africa"}${code}`;
     button.append(name, place);
     button.addEventListener("click", () => {
       searchInput.value = item.name;
       searchResults.hidden = true;
-      void selectMunicipality(item);
+      void selectGeography(item);
     });
     searchResults.append(button);
   });
   searchResults.hidden = false;
+  searchInput.setAttribute("aria-expanded", "true");
+  searchInput.setAttribute("aria-activedescendant", `search-result-${state.searchActiveIndex}`);
+}
+
+function updateActiveSearchResult(index) {
+  if (!state.searchMatches.length) return;
+  state.searchActiveIndex = (index + state.searchMatches.length) % state.searchMatches.length;
+  searchResults.querySelectorAll(".search-result").forEach((result, resultIndex) => {
+    const active = resultIndex === state.searchActiveIndex;
+    result.setAttribute("aria-selected", String(active));
+    if (active) result.scrollIntoView({ block: "nearest" });
+  });
+  searchInput.setAttribute("aria-activedescendant", `search-result-${state.searchActiveIndex}`);
 }
 
 function bindEvents() {
@@ -4054,9 +4505,50 @@ function bindEvents() {
     });
   });
   document.querySelector("#fit-map").addEventListener("click", () => {
-    if (state.boundaryLayer?.getBounds().isValid()) {
-      state.map.fitBounds(state.boundaryLayer.getBounds(), { padding: [30, 30], maxZoom: 6 });
+    resetMapToNational();
+  });
+  document.querySelector("#fullscreen-map").addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.querySelector(".map-panel").requestFullscreen();
+    } catch (error) {
+      showToast(`Could not change map full-screen mode: ${error.message}`);
     }
+  });
+  document.addEventListener("fullscreenchange", () => {
+    setTimeout(() => state.map?.invalidateSize(), 100);
+    const button = document.querySelector("#fullscreen-map");
+    const active = Boolean(document.fullscreenElement);
+    button.setAttribute("aria-label", active ? "Exit map full screen" : "Enter map full screen");
+    button.title = active ? "Exit full screen" : "Full screen map";
+  });
+  document.querySelector("#compare-map-toggle").addEventListener("click", async () => {
+    if (state.boundaryLevel !== "ADM3") {
+      try {
+        document.querySelector("#boundary-level").value = "ADM3";
+        await changeBoundaryLevel("ADM3");
+      } catch (error) {
+        showToast(`Could not load municipality boundaries: ${error.message}`);
+        return;
+      }
+    }
+    state.comparisonMode = !state.comparisonMode;
+    renderMapComparisonSelection();
+  });
+  document.querySelector("#map-compare-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remove-comparison-id]");
+    if (!button) return;
+    state.comparisonSelections = state.comparisonSelections.filter((id) =>
+      id !== button.dataset.removeComparisonId
+    );
+    refreshMapStyles();
+    renderMapComparisonSelection();
+  });
+  document.querySelector("#compare-map-action").addEventListener("click", () => {
+    if (state.comparisonSelections.length < 2) return;
+    state.comparisonMode = false;
+    setView("comparisons");
+    renderMapComparisonSelection();
   });
   document.querySelector("#download-profile").addEventListener("click", exportSelectedProfile);
   document.querySelector("#about-button").addEventListener("click", () => {
@@ -4071,22 +4563,66 @@ function bindEvents() {
     document.querySelector("#mobile-scrim").hidden = false;
   });
   document.querySelector("#mobile-profile-toggle").addEventListener("click", () => {
-    document.querySelector("#profile-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    setMobileProfileOpen(!document.body.classList.contains("mobile-profile-open"));
   });
   document.querySelector("#mobile-scrim").addEventListener("click", () => {
     document.body.classList.remove("mobile-nav-open");
     document.querySelector("#mobile-scrim").hidden = true;
   });
-  searchInput.addEventListener("input", () => renderSearchResults(searchInput.value));
+  searchInput.addEventListener("input", () => {
+    clearTimeout(state.searchDebounceTimer);
+    state.searchDebounceTimer = setTimeout(() => renderSearchResults(searchInput.value), 120);
+  });
   searchInput.addEventListener("focus", () => renderSearchResults(searchInput.value));
   searchInput.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       searchResults.hidden = true;
+      searchInput.setAttribute("aria-expanded", "false");
       searchInput.blur();
+    } else if (event.key === "ArrowDown" && !searchResults.hidden) {
+      event.preventDefault();
+      updateActiveSearchResult(state.searchActiveIndex + 1);
+    } else if (event.key === "ArrowUp" && !searchResults.hidden) {
+      event.preventDefault();
+      updateActiveSearchResult(state.searchActiveIndex - 1);
     } else if (event.key === "Enter") {
-      const first = searchResults.querySelector(".search-result");
-      if (first) first.click();
+      const active = searchResults.querySelector(`#search-result-${state.searchActiveIndex}`);
+      if (active) {
+        event.preventDefault();
+        active.click();
+      }
     }
+  });
+  searchClear.addEventListener("click", () => {
+    searchInput.value = "";
+    renderSearchResults("");
+    searchInput.focus();
+  });
+  document.querySelector("#open-municipality-profile").addEventListener("click", () => {
+    if (state.selected?.level !== "ADM3") return;
+    const url = new URL(location.href);
+    url.searchParams.set("geography", state.selected.id);
+    url.searchParams.set("tab", "overview");
+    url.hash = "dashboard";
+    location.assign(url.href);
+  });
+  document.querySelector("#breadcrumbs").addEventListener("click", (event) => {
+    const button = event.target.closest(".crumb-button");
+    if (!button) return;
+    if (button.dataset.geographyRoot) {
+      resetMapToNational();
+      return;
+    }
+    const item = state.geographies.find((geography) =>
+      geography.id === button.dataset.geographyId
+    );
+    if (item) void selectGeography(item);
+  });
+  document.querySelector("#geography-children").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-geography-id]");
+    if (!button) return;
+    const item = state.geographies.find((geography) => geography.id === button.dataset.geographyId);
+    if (item) void selectGeography(item);
   });
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".global-search")) searchResults.hidden = true;
@@ -4126,14 +4662,19 @@ async function initialize() {
   L.control.zoom({ position: "bottomright" }).addTo(state.map);
   L.control.scale({ imperial: false, position: "bottomright", maxWidth: 90 }).addTo(state.map);
   state.map.setView([-29, 24], 5);
+  if ("ResizeObserver" in window) {
+    state.mapResizeObserver = new ResizeObserver(() => state.map?.invalidateSize({ pan: false }));
+    state.mapResizeObserver.observe(mapElement);
+  }
   state.map.on("zoomend", () => {
     document.querySelector("#map-scale").textContent = state.map.getZoom().toFixed(1);
   });
 
   try {
-    const { health, sources, municipalities, collection } = await loadWorkspaceData();
+    const { health, sources, municipalities, geographies, collection } = await loadWorkspaceData();
     state.sources = sources;
     state.municipalities = municipalities;
+    state.geographies = geographies;
     void loadLiveSourceData();
     void loadCensusMapData(state.censusMapYear);
     void loadProvincialLabourData();
@@ -4142,14 +4683,25 @@ async function initialize() {
     renderFocusCards();
     renderNationalMetrics();
     setMapLayer(collection);
+    renderMapComparisonSelection();
     document.querySelector("#map-loading").hidden = true;
     document.querySelector("#boundary-count").textContent =
       `${health.boundaryLevels.ADM3} municipal boundaries`;
     document.querySelector("#map-location").textContent =
       `SOUTH AFRICA · ${health.boundaryLevels.ADM1} PROVINCES`;
     document.querySelector("#mobile-scrim").hidden = true;
-    const johannesburg = state.municipalities.find((item) => item.name === "City of Johannesburg");
-    if (johannesburg) updateProfile(johannesburg);
+    const params = new URLSearchParams(location.search);
+    const requestedGeography = state.geographies.find((item) =>
+      item.id === params.get("geography")
+    );
+    if (requestedGeography) {
+      await selectGeography(requestedGeography, { focus: false });
+      const requestedTab = params.get("tab");
+      if (requestedTab && tabContent[requestedTab]) setTab(requestedTab);
+    } else {
+      const johannesburg = state.municipalities.find((item) => item.name === "City of Johannesburg");
+      if (johannesburg) updateProfile(johannesburg);
+    }
   } catch (error) {
     document.querySelector("#map-loading").hidden = true;
     const mapError = document.querySelector("#map-error");

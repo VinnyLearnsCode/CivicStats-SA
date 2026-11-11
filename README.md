@@ -2,7 +2,7 @@
 
 **Understand South Africa through data.**
 
-CivicStats SA is a read-only, browser-based public-data workspace for South African municipalities. It includes an interactive Leaflet map, all 213 municipal boundaries, Census population and household profiles, municipal electricity-for-lighting data, province-level GDP-R and unemployment indicators, National Treasury finance and audit data, IEC 2021 councillor seat counts, NASA POWER climate normals at representative boundary points, municipality search, a comparison workspace and a source catalogue. Data without a verified source remains unavailable rather than being replaced with placeholders.
+CivicStats SA is a read-only, browser-based public-data workspace for South African municipalities. Its interactive Leaflet map covers all 274 boundary features across 9 provinces, 52 districts and metros, and 213 local and metropolitan municipalities. It also includes Census population and household profiles, municipal electricity-for-lighting data, province-level GDP-R and unemployment indicators, National Treasury finance and audit data, IEC 2021 councillor seat counts, NASA POWER climate normals at representative boundary points, geographic search, a comparison workspace and a source catalogue. Data without a verified source remains unavailable rather than being replaced with placeholders.
 
 ## Run locally
 
@@ -14,7 +14,7 @@ npm start
 
 Open <http://127.0.0.1:3000>. Set `PORT` to change the port. The server binds to loopback by default; set `HOST=0.0.0.0` only when intentionally exposing it on a trusted network.
 
-The map and bundled data work from a static host such as GitHub Pages or VS Code Live Server at `frontend/html/index.html`. Bundled Census 2011/2022 profiles and map layers, provincial unemployment, provincial GDP-R, 2021 IEC seat counts, and all boundary levels load without a Node server. National Treasury finance, documents and capital acquisition, NASA POWER climate, World Bank indicators, and live publication feeds require the Node API; these views report when that API is unavailable instead of inventing or silently omitting data.
+The map and bundled data work from a static host such as GitHub Pages or VS Code Live Server at `frontend/html/index.html`. Bundled Census 2011/2022 profiles and map layers, provincial unemployment, provincial GDP-R, 2021 IEC seat counts, and all boundary levels load without a Node server. Geographic search includes Census municipality codes in both static and API-backed deployments. National Treasury finance, documents and capital acquisition, NASA POWER climate, World Bank indicators, and live publication feeds require the Node API; these views report when that API is unavailable instead of inventing or silently omitting data.
 
 ## GitHub Pages
 
@@ -39,10 +39,13 @@ npm test
 
 ## Working in this prototype
 
-- Switch between province, district/metro and municipality boundaries; pan, zoom, hover and select features.
+- Switch between province, district/metro and municipality boundaries; pan, zoom, hover and select features. Boundary IDs use unique geoBoundaries `shapeID` values; Census municipal codes are provided separately where a verified Census match exists.
+- Navigate the full hierarchy through selection, child-geography lists and clickable breadcrumbs. Search provinces, districts, metros and local municipalities by name or Census municipal code, with keyboard-accessible suggestions. Selection zooms to and highlights the boundary and updates the geographic profile.
 - View Census 2011 or 2022 population density, water-scheme household shares and household electricity-for-lighting shares across all 213 municipalities. Electricity for lighting is not described as grid connection or reliability. The map uses five quantile classes, shows exact values on hover and documents its source and definition.
+- View reported population growth for 2011–2022 where the Census source provides it. Missing measurements use a neutral map fill and are labelled unavailable, not zero. Provincial unemployment and GDP-R layers are available only at province level; municipal finance and infrastructure map layers remain disabled until a complete, period-compatible source dataset is available.
+- Select two or three municipalities directly on the map and open the existing comparison workspace. Reset to the national view or use full-screen map mode. On mobile, the map comes first and the geographic profile opens as a collapsible bottom sheet.
 - Switch to province boundaries for Stats SA GDP-R contribution-to-national-GDP shading and select any reporting year from 2014–2024. The Economy profile also shows nominal GDP, real growth and industry activity for each province; none of these are presented as municipal GDP.
-- Search all 213 ADM3 features and open their boundary-based profiles.
+- Search all ADM1, ADM2 and ADM3 features and open their boundary-based profiles. Census municipal codes are matched for local and metropolitan municipalities; boundary names alone are not used as identifiers.
 - Open 2011/2022 Census population, age-band and household profiles for all 213 municipalities, including population, household and age comparisons.
 - Explore Census household counts for dwelling type, water source, toilet type and cooking energy, plus the separate Stats SA municipal electricity-for-lighting indicator for 2011 and 2022. Household shares derived from counts are labelled as calculated; cooking energy is not conflated with lighting source.
 - Switch the demographic and service profiles between the Census 2011 and 2022 reporting years, inspect the original source and extraction notes, and download the displayed indicator data as CSV.
@@ -110,6 +113,7 @@ The additional [`electricity-lighting-muni.csv`](frontend/assets/data/electricit
 - `GET /api/economy/provinces?year=2014..2024` — Stats SA GDP-R totals, contribution, real growth and industry activity for all nine provinces.
 - `GET /api/municipalities/{id}/census` — municipality Census indicators with separate electricity-for-lighting source metadata.
 - `GET /api/geo/ADM1|ADM2|ADM3` — a boundary FeatureCollection.
+- `GET /api/geographies?q=...` — province, district/metro and municipality directory with parent boundary IDs, classifications and matched Census municipal codes; `q` searches names, province/district names and municipal codes. Boundary GeoJSON responses are publicly cached for one day with stale-while-revalidate.
 - `GET /api/municipalities?q=...` — municipality search and boundary-derived hierarchy.
 - `GET /api/municipalities/:boundaryId` — geography metadata, an approximate boundary-derived area and explicit indicator availability.
 - `GET /api/municipalities/:boundaryId/census` — the source-linked Census record for a municipality.
