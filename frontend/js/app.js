@@ -72,6 +72,7 @@ const state = {
   searchGeneration: 0,
   searchDebounceTimer: null,
   selectionLayer: null,
+  nationalOutlineLayer: null,
   nationalBounds: null,
   mapResizeObserver: null,
   map: null,
@@ -965,6 +966,7 @@ function setView(view) {
   updatePageHeading();
   updateBreadcrumb();
   updateNavigation();
+  refreshSelectionLayer();
   if (comparisonMode || !workspace) renderAlternateView();
 }
 
@@ -1018,6 +1020,7 @@ function setTab(tab) {
   updatePageHeading();
   updateBreadcrumb();
   updateNavigation();
+  refreshSelectionLayer();
 }
 
 function renderNationalOverviewDetail() {
@@ -3793,13 +3796,37 @@ function refreshSelectionLayer() {
     state.selectionLayer = null;
   }
   const selected = state.selected;
-  if (!selected || selected.level === state.boundaryLevel) return;
-  const feature = state.collections.get(selected.level)?.features.find((item) =>
-    item.properties.shapeID === selected.id
-  );
-  if (!feature) return;
-  state.selectionLayer = L.geoJSON(feature, {
-    style: selectedStyle,
+  if (selected && selected.level !== state.boundaryLevel) {
+    const feature = state.collections.get(selected.level)?.features.find((item) =>
+      item.properties.shapeID === selected.id
+    );
+    if (feature) {
+      state.selectionLayer = L.geoJSON(feature, {
+        style: selectedStyle,
+        interactive: false
+      }).addTo(state.map);
+    }
+  }
+  refreshNationalOutlineLayer();
+}
+
+function refreshNationalOutlineLayer() {
+  if (!state.map) return;
+  if (state.nationalOutlineLayer) {
+    state.map.removeLayer(state.nationalOutlineLayer);
+    state.nationalOutlineLayer = null;
+  }
+  if (state.view !== "dashboard" || state.selected) return;
+  const provinces = state.collections.get("ADM1");
+  if (!provinces) return;
+  state.nationalOutlineLayer = L.geoJSON(provinces, {
+    style: {
+      color: "#57c7c1",
+      weight: 2.5,
+      opacity: 0.95,
+      fill: false,
+      fillOpacity: 0
+    },
     interactive: false
   }).addTo(state.map);
 }
