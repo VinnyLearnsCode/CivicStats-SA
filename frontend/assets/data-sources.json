@@ -130,8 +130,9 @@
     "url": "https://municipalmoney.gov.za/infrastructure/projects/",
     "license": "Municipal Money data terms of use",
     "portalUrl": "https://municipalmoney.gov.za/infrastructure/projects/",
-    "status": "portal-only",
-    "detail": "Public named municipal infrastructure project register with budget, function, type and project-status fields. The portal reports 2026 Q2 figures and notes that completeness and integrity checks are in progress. It is available as a municipality-filtered source link; it is not the same dataset as Treasury Capital Acquisition (v2)."
+    "apiUrl": "https://municipalmoney.gov.za/api/v1/infrastructure/search",
+    "status": "live-api",
+    "detail": "CivicStats loads municipality-filtered named project records from the public API for the published financial years 2017/2018 and 2019/2020 through 2023/2024. FY 2018/2019 is not present in the source catalogue. Source project classifications are not treated as completion status. This is a distinct dataset from Treasury Capital Acquisition (v2)."
   },
   {
     "id": "agsa",

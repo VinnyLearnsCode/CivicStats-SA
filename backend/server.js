@@ -1250,6 +1250,64 @@ async function loadTreasuryCapitalAcquisitions(providerClient, municipality, yea
   };
 }
 
+const namedProjectYears = new Set(["2017/2018", "2019/2020", "2020/2021", "2021/2022", "2022/2023", "2023/2024"]);
+const namedProjectsApi = "https://municipalmoney.gov.za/api/v1/infrastructure/search";
+
+function normalizeNamedProject(record) {
+  const expenditure = Array.isArray(record.expenditure) ? record.expenditure : [];
+  return {
+    id: String(record.id ?? ""),
+    name: String(record.project_description ?? "Unnamed infrastructure project"),
+    projectNumber: record.project_number == null ? null : String(record.project_number),
+    type: record.project_type == null ? null : String(record.project_type),
+    function: record.function == null ? null : String(record.function),
+    ward: record.ward_location == null ? null : String(record.ward_location),
+    status: record.status == null ? null : String(record.status),
+    financialYear: record.financial_year == null ? null : String(record.financial_year),
+    expenditure: expenditure.filter((entry) => entry && Number.isFinite(Number(entry.amount))).map((entry) => ({
+      amount: Number(entry.amount),
+      financialYear: String(entry.financial_year ?? ""),
+      budgetPhase: String(entry.budget_phase?.name ?? entry.budget_phase ?? "Not specified")
+    }))
+  };
+}
+
+async function loadNamedInfrastructureProjects(providerClient, municipality, year) {
+  const projects = [];
+  let total = 0;
+  // The public API returns 150 records per page; cap collection to prevent a
+  // provider response from creating unbounded memory or request work.
+  for (let page = 1; page <= 8; page += 1) {
+    const endpoint = new URL(namedProjectsApi);
+    endpoint.searchParams.set("municipality", municipality.name);
+    endpoint.searchParams.set("province", municipality.province);
+    endpoint.searchParams.set("financial_year", year);
+    endpoint.searchParams.set("page", String(page));
+    const result = await providerClient.getJson(endpoint, { timeoutMs: 20000 });
+    const pageProjects = Array.isArray(result.results) ? result.results :
+      Array.isArray(result.results?.projects) ? result.results.projects :
+        Array.isArray(result.projects) ? result.projects : [];
+    total = Number.isFinite(Number(result.count)) ? Number(result.count) : total;
+    projects.push(...pageProjects.map(normalizeNamedProject));
+    if (!result.next || !pageProjects.length || projects.length >= 1200) break;
+  }
+  return {
+    municipality: { name: municipality.name, province: municipality.province },
+    financialYear: year,
+    projects,
+    totalRecords: total || projects.length,
+    truncated: total > projects.length,
+    source: {
+      publisher: "National Treasury and OpenUp · Municipal Money",
+      dataset: "Municipal infrastructure projects",
+      url: "https://municipalmoney.gov.za/infrastructure/projects/",
+      apiUrl: namedProjectsApi,
+      note: "The source dataset is available through FY 2023/2024. Project type describes the source classification and is not a completion status."
+    },
+    checkedAt: new Date().toISOString()
+  };
+}
+
 async function loadTreasuryMunicipalDocuments(providerClient, municipality) {
   const members = await loadTreasuryMembers(providerClient);
   const member = matchTreasuryMunicipality(municipality, members);
@@ -2118,6 +2176,35 @@ export async function createAppServer({
       }
       void respondFromProvider(response, "National Treasury capital-acquisition data", () =>
         loadTreasuryCapitalAcquisitions(providerClient, municipality, year)
+      );
+      return;
+    }
+
+    const namedProjectsMatch = url.pathname.match(/^\/api\/municipalities\/([^/]+)\/named-projects$/);
+    if (namedProjectsMatch) {
+      let id;
+      try {
+        id = decodeURIComponent(namedProjectsMatch[1]);
+      } catch {
+        jsonResponse(response, 400, { error: "Invalid municipality reference." });
+        return;
+      }
+      const municipality = municipalities.find((item) => item.id === id);
+      if (!municipality) {
+        jsonResponse(response, 404, { error: "Municipality not found." });
+        return;
+      }
+      if (municipality.level !== "ADM3") {
+        jsonResponse(response, 400, { error: "Named infrastructure projects are available for municipalities, not this geography level." });
+        return;
+      }
+      const year = url.searchParams.get("year") ?? "2023/2024";
+      if (!namedProjectYears.has(year)) {
+        jsonResponse(response, 400, { error: "Named-project reporting year must be one of the years published by the source." });
+        return;
+      }
+      void respondFromProvider(response, "National Treasury named infrastructure projects", () =>
+        loadNamedInfrastructureProjects(providerClient, municipality, year)
       );
       return;
     }

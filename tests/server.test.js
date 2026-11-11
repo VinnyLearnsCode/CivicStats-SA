@@ -923,6 +923,59 @@ test("capital acquisition rejects invalid years and non-municipality references"
   assert.match((await wrongLevel.json()).error, /Municipality not found/);
 });
 
+test("named project API returns bounded, sanitized source records and rejects unsupported years", async () => {
+  const urls = [];
+  const projectServer = await createAppServer({
+    dataStore: null,
+    adminToken: null,
+    fetchImpl: async (input) => {
+      const url = new URL(input);
+      urls.push(url);
+      assert.equal(url.origin, "https://municipalmoney.gov.za");
+      return Response.json({
+        count: 1,
+        next: null,
+        results: { projects: [{
+          id: 123,
+          project_description: "Water pipeline upgrade",
+          project_number: "WTR-1",
+          project_type: "Upgrading",
+          function: "Water Management",
+          ward_location: "Ward 4",
+          financial_year: "2023/2024",
+          geography: { contact: "private@example.test", address: "private address" },
+          expenditure: [{ amount: "1200.50", financial_year: "2023/2024", budget_phase: { name: "Adjusted Budget" } }]
+        }] }
+      });
+    }
+  });
+  await new Promise((resolve) => projectServer.listen(0, "127.0.0.1", resolve));
+  const projectUrl = `http://127.0.0.1:${projectServer.address().port}`;
+  try {
+    const { municipalities } = await fetch(`${projectUrl}/api/municipalities`).then((response) => response.json());
+    const johannesburg = municipalities.find((item) => item.name === "City of Johannesburg");
+    const unsupported = await fetch(`${projectUrl}/api/municipalities/${encodeURIComponent(johannesburg.id)}/named-projects?year=2026/2027`);
+    assert.equal(unsupported.status, 400);
+    assert.equal(urls.length, 0);
+
+    const response = await fetch(`${projectUrl}/api/municipalities/${encodeURIComponent(johannesburg.id)}/named-projects?year=2023/2024`);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.projects.length, 1);
+    assert.equal(result.projects[0].name, "Water pipeline upgrade");
+    assert.deepEqual(result.projects[0].expenditure[0], {
+      amount: 1200.5,
+      financialYear: "2023/2024",
+      budgetPhase: "Adjusted Budget"
+    });
+    assert.doesNotMatch(JSON.stringify(result), /private@example|private address/);
+    assert.equal(urls[0].searchParams.get("municipality"), "City of Johannesburg");
+    assert.equal(urls[0].searchParams.get("financial_year"), "2023/2024");
+  } finally {
+    await new Promise((resolve, reject) => projectServer.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 test("provincial unemployment API returns complete source-linked Stats SA QLFS periods", async () => {
   const response = await get("/api/labour/provinces");
   assert.equal(response.status, 200);

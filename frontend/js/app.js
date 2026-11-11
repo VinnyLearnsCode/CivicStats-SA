@@ -2625,7 +2625,8 @@ function createDocumentsProjectsNavigation() {
   navigation.setAttribute("aria-label", "Documents and projects data");
   [
     ["documents", "Documents"],
-    ["projects", "Capital projects & assets"]
+    ["projects", "Capital spending categories"],
+    ["named-projects", "Named infrastructure projects"]
   ].forEach(([pane, label]) => {
     const button = document.createElement("button");
     button.className = `section-tab${state.documentsProjectsPane === pane ? " active" : ""}`;
@@ -2675,7 +2676,88 @@ function renderDocumentsProjects() {
     return;
   }
 
+  if (state.documentsProjectsPane === "named-projects") {
+    renderNamedMunicipalProjects(selected, requestId, navigation);
+    return;
+  }
   renderMunicipalProjects(selected, requestId, navigation);
+}
+
+function renderNamedMunicipalProjects(selected, requestId, navigation) {
+  const parent = detailBody;
+  const controls = document.createElement("div");
+  controls.className = "finance-controls";
+  const label = document.createElement("label");
+  label.textContent = "SOURCE REPORTING YEAR";
+  const yearSelect = document.createElement("select");
+  yearSelect.setAttribute("aria-label", "Named infrastructure project reporting year");
+  const years = ["2023/2024", "2022/2023", "2021/2022", "2020/2021", "2019/2020", "2017/2018"];
+  years.forEach((year) => {
+    const option = document.createElement("option");
+    option.value = year;
+    option.textContent = year;
+    option.selected = year === (state.namedProjectsYear ?? years[0]);
+    yearSelect.append(option);
+  });
+  yearSelect.addEventListener("change", () => {
+    state.namedProjectsYear = yearSelect.value;
+    renderDetail();
+  });
+  label.append(yearSelect);
+  controls.append(label);
+  parent.replaceChildren(navigation, controls);
+  const year = state.namedProjectsYear ?? years[0];
+  addDetailMessage(parent, "Loading named infrastructure projects", `Requesting ${year} records for ${selected.name}…`, "finance-loading");
+  void getJson(`/api/municipalities/${encodeURIComponent(selected.id)}/named-projects?year=${encodeURIComponent(year)}`).then((result) => {
+    if (requestId !== state.documentsProjectsRequestId || state.tab !== "documents" ||
+      state.selected?.id !== selected.id || state.documentsProjectsPane !== "named-projects") return;
+    parent.replaceChildren(navigation, controls);
+    renderNamedProjectRecords(parent, result);
+  }).catch((error) => {
+    if (requestId !== state.documentsProjectsRequestId || state.tab !== "documents" ||
+      state.selected?.id !== selected.id || state.documentsProjectsPane !== "named-projects") return;
+    parent.replaceChildren(navigation, controls);
+    addDetailMessage(parent, "Named project data unavailable", `${error.message} No project records were substituted.`);
+    addSourceLink(parent, "https://municipalmoney.gov.za/infrastructure/projects/", "Open Municipal Money project register ↗");
+  });
+}
+
+function renderNamedProjectRecords(parent, result) {
+  const section = appendCensusSection(parent,
+    `${result.municipality.name} · named infrastructure projects`,
+    `Municipal Money source records for FY ${result.financialYear}. The source provides selected years from FY 2017/2018 through FY 2023/2024; FY 2018/2019 is absent from its published catalogue. Project type is not a completion status.`);
+  const note = document.createElement("p");
+  note.className = "finance-source-note";
+  note.textContent = `${Number(result.totalRecords).toLocaleString("en-ZA")} source records${result.truncated ? `; showing the first ${result.projects.length.toLocaleString("en-ZA")} records` : ""}. Checked ${new Date(result.checkedAt).toLocaleString("en-ZA")}.`;
+  section.append(note);
+  if (!result.projects.length) {
+    addDetailMessage(section, "No records returned", "The source returned no named-project records for this municipality and reporting year. This is not evidence that the municipality had no projects.");
+  } else {
+    result.projects.forEach((project) => {
+      const article = document.createElement("article");
+      article.className = "audit-opinion document-record";
+      const title = document.createElement("strong");
+      title.textContent = project.name;
+      article.append(title);
+      const details = document.createElement("p");
+      details.className = "finance-source-note";
+      details.textContent = [
+        project.projectNumber && `Project ${project.projectNumber}`,
+        project.type && `Type: ${project.type}`,
+        project.function && `Function: ${project.function}`,
+        project.ward && `Ward: ${project.ward}`
+      ].filter(Boolean).join(" · ") || "No additional project details supplied.";
+      article.append(details);
+      project.expenditure.forEach((item) => {
+        const amount = document.createElement("p");
+        amount.className = "finance-source-note";
+        amount.textContent = `${item.financialYear || result.financialYear} · ${item.budgetPhase}: R ${item.amount.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}`;
+        article.append(amount);
+      });
+      section.append(article);
+    });
+  }
+  addSourceLink(section, result.source.url, "Open source municipal project register ↗");
 }
 
 function renderMunicipalDocuments(parent, result) {
