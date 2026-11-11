@@ -937,6 +937,7 @@ function setView(view) {
   const workspace = ["dashboard", "national", "workspace"].includes(state.view);
   setMobileProfileOpen(false);
   workspaceGrid.hidden = !workspace;
+  workspaceGrid.classList.toggle("section-detail-active", workspace && state.tab !== "overview");
   sectionTabs.hidden = !workspace;
   alternateView.hidden = workspace;
   updatePageHeading();
@@ -984,6 +985,7 @@ function setTab(tab) {
   state.tab = tab;
   state.view = "dashboard";
   workspaceGrid.hidden = false;
+  workspaceGrid.classList.toggle("section-detail-active", tab !== "overview");
   sectionTabs.hidden = false;
   alternateView.hidden = true;
   renderDetail();
