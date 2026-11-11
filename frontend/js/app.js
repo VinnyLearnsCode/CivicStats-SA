@@ -938,6 +938,8 @@ function setView(view) {
   setMobileProfileOpen(false);
   workspaceGrid.hidden = !workspace;
   workspaceGrid.classList.toggle("section-detail-active", workspace && state.tab !== "overview");
+  workspaceGrid.classList.toggle("map-compact", workspace && state.tab !== "overview");
+  document.querySelector("#map-compact-toggle").hidden = !(workspace && state.tab !== "overview");
   sectionTabs.hidden = !workspace;
   alternateView.hidden = workspace;
   updatePageHeading();
@@ -986,6 +988,8 @@ function setTab(tab) {
   state.view = "dashboard";
   workspaceGrid.hidden = false;
   workspaceGrid.classList.toggle("section-detail-active", tab !== "overview");
+  workspaceGrid.classList.toggle("map-compact", tab !== "overview");
+  document.querySelector("#map-compact-toggle").hidden = tab === "overview";
   sectionTabs.hidden = false;
   alternateView.hidden = true;
   renderDetail();
@@ -5305,6 +5309,12 @@ function bindEvents() {
   });
   document.querySelector("#fit-map").addEventListener("click", () => {
     resetMapToNational();
+  });
+  document.querySelector("#map-compact-toggle").addEventListener("click", (event) => {
+    const compact = workspaceGrid.classList.toggle("map-compact");
+    event.currentTarget.textContent = compact ? "Expand map" : "Compact map";
+    event.currentTarget.setAttribute("aria-expanded", String(!compact));
+    requestAnimationFrame(() => state.map?.invalidateSize({ pan: false }));
   });
   document.querySelector("#fullscreen-map").addEventListener("click", async () => {
     try {
