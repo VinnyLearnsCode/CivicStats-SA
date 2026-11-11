@@ -19,6 +19,9 @@ const state = {
   economyMapLoading: false,
   economyLoadPromise: null,
   economyLoadYear: null,
+  nationalEconomyData: null,
+  nationalEconomyError: null,
+  nationalEconomyLoading: false,
   labourData: null,
   labourLoadPromise: null,
   labourMapRecords: new Map(),
@@ -4695,28 +4698,41 @@ function renderFocusCards() {
 function renderNationalMetrics() {
   const container = document.querySelector("#national-metrics");
   if (!container) return;
-  const municipalityCount = state.municipalities.length;
-  const censusLoaded = municipalityCount > 0 && state.censusMapRecords.size === municipalityCount;
-  const unemploymentLoaded = state.labourMapRecords.size === 9;
-  const censusStatus = censusLoaded
-    ? `${state.censusMapRecords.size}/${municipalityCount}`
-    : state.censusMapLoading
-      ? "Loading"
-      : state.censusMapError
-        ? "Unavailable"
-        : "—";
-  const labourStatus = unemploymentLoaded
-    ? `${state.labourMapRecords.size}/9`
-    : state.labourMapLoading
-      ? "Loading"
-      : state.labourMapError
-        ? "Unavailable"
-        : "—";
+  const censusLoaded = state.municipalities.length > 0 &&
+    state.censusMapRecords.size === state.municipalities.length;
+  const nationalPopulation = censusLoaded
+    ? [...state.censusMapRecords.values()].reduce((total, record) => total + record.population, 0)
+    : null;
+  const gdpDataset = state.provincialEconomyData;
+  const usdGdp = state.nationalEconomyData?.indicators?.find((indicator) => indicator.key === "gdpCurrentUsd");
+  const latestUsdGdp = usdGdp?.values?.at(-1);
   const metrics = [
-    { label: "Provinces", value: "9", note: "Administrative regions" },
-    { label: "Municipal boundaries", value: String(municipalityCount), note: "geoBoundaries ADM3 records" },
-    { label: `Census ${state.censusMapYear}`, value: censusStatus, note: censusLoaded ? "municipal profiles loaded" : "Stats SA municipal records" },
-    { label: "QLFS unemployment", value: labourStatus, note: "Stats SA provincial estimates" }
+    {
+      label: `Nominal GDP · ${gdpDataset?.year ?? "Stats SA"}`,
+      value: gdpDataset?.national?.gdpCurrentPricesRandMillions != null
+        ? `R${formatCensusNumber(gdpDataset.national.gdpCurrentPricesRandMillions / 1000, 1)} bn`
+        : state.economyMapLoading ? "Loading…" : "Unavailable",
+      note: "Current prices · Stats SA GDP-R"
+    },
+    {
+      label: `Real GDP growth · ${gdpDataset?.year ?? "Stats SA"}`,
+      value: Number.isFinite(gdpDataset?.national?.realGdpGrowthPercent)
+        ? `${formatCensusNumber(gdpDataset.national.realGdpGrowthPercent, 1)}%`
+        : state.economyMapLoading ? "Loading…" : "Unavailable",
+      note: "Inflation-adjusted · Stats SA GDP-R"
+    },
+    {
+      label: `GDP · current US$ · ${latestUsdGdp?.year ?? "World Bank"}`,
+      value: Number.isFinite(latestUsdGdp?.value)
+        ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(latestUsdGdp.value)
+        : state.nationalEconomyLoading ? "Loading…" : "Unavailable",
+      note: "Nominal · World Bank WDI"
+    },
+    {
+      label: "Population · Census 2022",
+      value: Number.isFinite(nationalPopulation) ? formatCensusNumber(nationalPopulation) : "Loading…",
+      note: censusLoaded ? "Sum of municipal Census records" : "Statistics South Africa"
+    }
   ];
   container.innerHTML = metrics.map((metric) => `
     <article class="summary-card">
@@ -4725,6 +4741,26 @@ function renderNationalMetrics() {
       <span>${escapeHtml(metric.note)}</span>
     </article>
   `).join("");
+}
+
+function loadNationalDashboardEconomy() {
+  if (state.nationalEconomyData || state.nationalEconomyLoading) return;
+  state.nationalEconomyLoading = true;
+  state.nationalEconomyError = null;
+  renderNationalMetrics();
+  void getJson("/api/economy/national").then((result) => {
+    const gdp = result.indicators?.find((indicator) => indicator.key === "gdpCurrentUsd");
+    if (result.geographyLevel !== "National" || result.country !== "South Africa" ||
+      result.source?.publisher !== "World Bank" || !Array.isArray(gdp?.values)) {
+      throw new Error("The national GDP series did not include valid World Bank source metadata.");
+    }
+    state.nationalEconomyData = result;
+  }).catch((error) => {
+    state.nationalEconomyError = error.message;
+  }).finally(() => {
+    state.nationalEconomyLoading = false;
+    renderNationalMetrics();
+  });
 }
 
 function renderMunicipalityTable() {
@@ -5615,7 +5651,8 @@ async function initialize() {
     void loadLiveSourceData();
     void loadCensusMapData(state.censusMapYear);
     void loadProvincialLabourData();
-    void loadProvincialGdpData(state.economyMapYear);
+    void loadProvincialGdpData(state.economyMapYear).then(() => renderNationalMetrics());
+    loadNationalDashboardEconomy();
     renderFocusCards();
     renderNationalMetrics();
     setMapLayer(startupCollection);

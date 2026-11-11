@@ -267,7 +267,7 @@ a { color: inherit; }
 .map-panel:fullscreen .map-footer { flex: 0 0 auto; }
 
 .focus-panel { margin-bottom: 12px; }
-.national-metrics-heading { margin: 0 13px; padding: 8px 10px 0; border-top: 2px solid #52a9d2; }
+.national-metrics-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 13px; padding: 8px 10px 0; border-top: 2px solid #52a9d2; }
 .national-metrics-heading .panel-kicker { color: #8ac4df; letter-spacing: .08em; }
 .focus-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0 13px 12px; }
 .focus-card { width: 100%; min-height: 104px; padding: 10px 11px; border: 1px solid var(--border-soft); background: linear-gradient(180deg, rgba(87, 199, 193, .04), rgba(87, 199, 193, 0)); color: inherit; cursor: pointer; font: inherit; text-align: left; }
@@ -788,3 +788,5 @@ body { font-size: 14px; line-height: 1.5; }
 .map-table-heading .action-button { min-height: 36px; }
 .share-view-button { min-height: 32px; white-space: nowrap; }
 @media (max-width: 760px) { .share-view-button { padding: 0 7px; font-size: 9px; } }
+
+.national-metrics-note { color: var(--muted); font-size: 9px; }
