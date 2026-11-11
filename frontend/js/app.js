@@ -4433,6 +4433,10 @@ function updateMapRegionAccessibility() {
     }
     if (path.dataset.keyboardNavigationReady) return;
     path.dataset.keyboardNavigationReady = "true";
+    path.addEventListener("click", (event) => {
+      event.stopPropagation();
+      activateMapRegion(feature, { focus: false });
+    });
     path.addEventListener("keydown", (event) => handleMapRegionKeydown(layer, event));
     path.addEventListener("focus", () => {
       state.mapRovingId = properties.shapeID;
@@ -4445,7 +4449,7 @@ function updateMapRegionAccessibility() {
   });
 }
 
-function activateMapRegion(feature) {
+function activateMapRegion(feature, { focus = true } = {}) {
   if (state.comparisonMode) {
     if (feature.properties.shapeType !== "ADM3") {
       showToast("Map comparison currently supports municipalities only. Switch to Municipalities to select places.");
@@ -4455,7 +4459,7 @@ function activateMapRegion(feature) {
     return;
   }
   const item = state.geographies.find((geography) => geography.id === feature.properties.shapeID);
-  if (item) void selectGeography(item);
+  if (item) void selectGeography(item, { focus });
 }
 
 function handleMapRegionKeydown(layer, event) {
@@ -4498,8 +4502,7 @@ function setMapLayer(collection) {
         },
         mouseout: () => {
           layer.setStyle(styleForFeature(feature));
-        },
-        click: () => activateMapRegion(feature)
+        }
       });
     }
   }).addTo(state.map);
