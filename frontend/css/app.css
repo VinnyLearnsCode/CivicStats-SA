@@ -763,3 +763,11 @@ body { font-size: 14px; line-height: 1.5; }
 
 .map-keyboard-hint { color: #aab5af; font-size: 10px; line-height: 1.4; }
 @media (max-width: 640px) { .map-keyboard-hint { flex: 1 1 100%; order: 4; } }
+
+.metric-explainer { margin-top: 7px; padding-top: 5px; border-top: 1px solid var(--border-soft); }
+.metric-explainer summary { display: flex; align-items: center; width: fit-content; min-height: 36px; color: var(--accent-soft); cursor: pointer; font-size: 11px; text-decoration: underline; text-underline-offset: 2px; }
+.metric-explainer summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.metric-explainer p { margin: 6px 0 0; color: #b6c1bb; font-size: 11px; line-height: 1.55; }
+.metric-explainer .metric-explainer-caveat { color: #9eaaA4; }
+.metric-explainer small { display: block; margin-top: 5px; color: #93a098; font-size: 10px; line-height: 1.5; }
+@media (max-width: 640px) { .metric-explainer summary { min-height: 44px; } }

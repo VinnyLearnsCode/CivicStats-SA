@@ -73,6 +73,7 @@ const indicatorGuideEntries = [
   { name: "Population", category: "Demographics", definition: "The number of people counted for a municipality in the relevant Census. It is a count, not a current population estimate.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "Census figures describe their census dates; they are not updated between censuses." },
   { name: "Households", category: "Demographics", definition: "The Census count of households in the municipality. Household totals are separate from the population count.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "Do not compare a household count with a population count as if they were the same unit." },
   { name: "Average household size", category: "Demographics", definition: "The average number of people per household in the source period.", period: "Census 2022", source: "Statistics South Africa · Census", caveat: "An average can hide differences between households and neighbourhoods." },
+  { name: "Sex ratio", category: "Demographics", definition: "The sex-ratio value reported in the source Census table for this area and year.", period: "Census 2011 and 2022 where supplied", source: "Statistics South Africa · Census", caveat: "This is a source-reported ratio; consult the original table for its exact denominator and method." },
   { name: "Population growth", category: "Demographics", definition: "The reported change in population between the 2011 and 2022 Census records.", period: "2011–2022", source: "Statistics South Africa · Census", caveat: "This is a historical, inter-censal measure, not a forecast or current annual growth rate." },
   { name: "Age and school attendance", category: "Demographics", definition: "Counts for source-defined age bands and people aged 5–24 recorded as attending school.", period: "Census 2022", source: "Statistics South Africa · Census", caveat: "Use the age range and Census year shown with each value." },
   { name: "Water scheme household share", category: "Household services", definition: "The share of households reporting the source’s water-scheme category, calculated from the reported household count and total households.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "This household response does not measure current supply continuity, water quality or pressure." },
@@ -1030,6 +1031,66 @@ function formatCensusNumber(value, maximumFractionDigits = 0) {
   return new Intl.NumberFormat("en-ZA", { maximumFractionDigits }).format(value);
 }
 
+function metricGuideEntry(label, note = "") {
+  const text = `${label} ${note}`.toLocaleLowerCase();
+  const guideName = text.includes("expanded unemployment") || text.includes("lu3")
+    ? "Expanded unemployment (LU3)"
+    : text.includes("unemployment")
+      ? "Official unemployment rate"
+      : text.includes("population change") || text.includes("growth rate")
+        ? "Population growth"
+        : text.includes("electricity") && text.includes("cook")
+          ? "Electricity for cooking"
+          : text.includes("electricity") && (text.includes("light") || text.includes("lighting"))
+            ? "Electricity for lighting"
+            : text.includes("water scheme")
+              ? "Water scheme household share"
+              : text.includes("flush toilet")
+                ? "Flush toilet household share"
+                : text.includes("sex ratio")
+                  ? "Sex ratio"
+                  : text.includes("household size")
+                    ? "Average household size"
+                    : text.includes("school") || text.includes("age")
+                      ? "Age and school attendance"
+                      : text.includes("household")
+                        ? "Households"
+                        : text.includes("male population") || text.includes("female population") || text.includes("population")
+                          ? "Population"
+                          : text.includes("temperature") || text.includes("precipitation") || text.includes("climate")
+                            ? "Climate normals"
+                            : text.includes("audit")
+                              ? "Audit opinion"
+                              : text.includes("seat") || text.includes("parties represented")
+                                ? "Council seats"
+                                : text.includes("capital acquisition")
+                                  ? "Capital acquisition categories"
+                                  : text.includes("revenue") || text.includes("expenditure") || text.includes("surplus") || text.includes("financial") || text.includes("treasury")
+                                    ? "Municipal finance line items"
+                                    : text.includes("gdp") || text.includes("industry")
+                                      ? text.includes("latest available") ? "National economic indicators" : "GDP-R and industry activity"
+                                      : null;
+  return indicatorGuideEntries.find((entry) => entry.name === guideName) ?? null;
+}
+
+function addMetricExplanation(parent, label, note = "") {
+  const entry = metricGuideEntry(label, note);
+  if (!entry) return;
+  const details = document.createElement("details");
+  details.className = "metric-explainer";
+  const summary = document.createElement("summary");
+  summary.textContent = "What this means";
+  const definition = document.createElement("p");
+  definition.textContent = entry.definition;
+  const caveat = document.createElement("p");
+  caveat.className = "metric-explainer-caveat";
+  caveat.textContent = `Keep in mind: ${entry.caveat}`;
+  const provenance = document.createElement("small");
+  provenance.textContent = `Source: ${entry.source} · Period: ${entry.period}`;
+  details.append(summary, definition, caveat, provenance);
+  parent.append(details);
+}
+
 function appendCensusMetric(parent, label, value, note = "") {
   const metric = document.createElement("article");
   metric.className = "census-metric";
@@ -1043,6 +1104,7 @@ function appendCensusMetric(parent, label, value, note = "") {
     caption.textContent = note;
     metric.append(caption);
   }
+  addMetricExplanation(metric, label, note);
   parent.append(metric);
 }
 
@@ -1909,6 +1971,7 @@ function renderFinanceSummary(parent, records, selectedType) {
       const caption = document.createElement("small");
       caption.textContent = `${description} · ${type}`;
       metric.append(title, amount, caption);
+      addMetricExplanation(metric, label, `${description} · ${type}`);
       grid.append(metric);
     });
     parent.append(grid);
@@ -2050,6 +2113,7 @@ function renderProvincialLabourData(parent, selectedProvince, dataset) {
     const note = document.createElement("small");
     note.textContent = caption;
     metric.append(label, value, note);
+    addMetricExplanation(metric, title, caption);
     metrics.append(metric);
     metricElements.set(key, value);
   });

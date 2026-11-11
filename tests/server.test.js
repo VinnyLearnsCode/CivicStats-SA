@@ -393,6 +393,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(stylesheetText, /\.compare-mobile-card/);
   assert.match(stylesheetText, /\.map-legend-band-rank/);
   assert.match(stylesheetText, /\.leaflet-interactive:focus-visible/);
+  assert.match(stylesheetText, /\.metric-explainer/);
   assert.equal(application.status, 200);
   assert.match(application.headers.get("content-type"), /javascript/);
   const applicationScript = await application.text();
@@ -400,6 +401,9 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /compare-share/);
   assert.match(applicationScript, /searchParams\.set\("compare"/);
   assert.match(applicationScript, /indicatorGuideEntries/);
+  assert.match(applicationScript, /function metricGuideEntry/);
+  assert.match(applicationScript, /function addMetricExplanation/);
+  assert.match(applicationScript, /What this means/);
   assert.match(applicationScript, /renderIndicatorGuide/);
   assert.match(applicationScript, /Provincial economy & labour/);
   assert.match(applicationScript, /function renderMapDataTable/);
