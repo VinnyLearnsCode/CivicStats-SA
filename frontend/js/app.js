@@ -4118,6 +4118,7 @@ function setLabourQuarter(quarter) {
   const select = document.querySelector("#labour-quarter");
   if (select) select.value = period.code;
   refreshMapStyles();
+  renderNationalHighlights();
 }
 
 async function loadProvincialLabourData() {
@@ -4178,6 +4179,7 @@ async function loadProvincialLabourData() {
       state.labourLoadPromise = null;
       refreshMapStyles();
       renderNationalMetrics();
+      renderNationalHighlights();
       if (state.selected) void updateProfileSummary(state.selected);
     });
   return state.labourLoadPromise;
@@ -4235,6 +4237,8 @@ async function loadProvincialGdpData(year = state.economyMapYear) {
         state.economyLoadPromise = null;
         state.economyLoadYear = null;
         refreshMapStyles();
+        renderNationalMetrics();
+        renderNationalHighlights();
       }
     });
   return state.economyLoadPromise;
@@ -4666,31 +4670,49 @@ function resetMapToNational() {
   }
 }
 
-function renderFocusCards() {
-  const focusMunicipalities = [
-    { name: "City of Johannesburg", detail: "Metropolitan municipality · Gauteng" },
-    { name: "City of Tshwane", detail: "Metropolitan municipality · Gauteng" },
-    { name: "Ekurhuleni", detail: "Metropolitan municipality · Gauteng" }
-  ];
-  const cards = focusMunicipalities.map((focus) => {
-    const municipality = state.municipalities.find((item) => item.name === focus.name);
-    if (!municipality) {
-      return `<article class="focus-card"><h3>${escapeHtml(focus.name)}</h3>
-        <p>Boundary record is not available in the loaded dataset.</p></article>`;
-    }
-    return `<button class="focus-card" type="button" data-focus-id="${escapeHtml(municipality.id)}">
-      <h3>${escapeHtml(municipality.name)}</h3>
-      <p>${escapeHtml(focus.detail)}</p>
-      <span class="focus-meta"><span class="focus-status">Boundary loaded</span><span>Open profile ↗</span></span>
-    </button>`;
-  }).join("");
+function renderNationalHighlights() {
   const grid = document.querySelector("#focus-grid");
   if (!grid) return;
-  grid.innerHTML = cards;
-  grid.querySelectorAll("[data-focus-id]").forEach((button) => {
+  const gdpRecords = state.provincialEconomyData?.records ?? [];
+  const unemploymentRecords = [...state.labourMapRecords.values()];
+  const highlights = [
+    {
+      label: "Largest share of national GDP",
+      record: gdpRecords.length ? [...gdpRecords].sort((a, b) => b.gdpContributionPercent - a.gdpContributionPercent)[0] : null,
+      value: (record) => `${formatCensusNumber(record.gdpContributionPercent, 1)}%`,
+      note: state.provincialEconomyData ? `Stats SA GDP-R · ${state.provincialEconomyData.year}` : "Stats SA GDP-R · loading"
+    },
+    {
+      label: "Fastest real GDP growth",
+      record: gdpRecords.length ? [...gdpRecords].sort((a, b) => b.realGdpGrowthPercent - a.realGdpGrowthPercent)[0] : null,
+      value: (record) => `${formatCensusNumber(record.realGdpGrowthPercent, 1)}%`,
+      note: state.provincialEconomyData ? `Inflation-adjusted · ${state.provincialEconomyData.year}` : "Stats SA GDP-R · loading"
+    },
+    {
+      label: "Highest official unemployment",
+      record: unemploymentRecords.length ? [...unemploymentRecords].sort((a, b) => b.officialRate - a.officialRate)[0] : null,
+      value: (record) => `${formatCensusNumber(record.officialRate, 1)}%`,
+      note: state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? "Stats SA QLFS · loading"
+    }
+  ];
+  grid.innerHTML = highlights.map((highlight) => {
+    const record = highlight.record;
+    const name = record?.province ?? (highlight.label === "Highest official unemployment"
+      ? state.labourMapLoading ? "Loading…" : "Unavailable"
+      : state.economyMapLoading ? "Loading…" : "Unavailable");
+    return `<button class="focus-card" type="button" data-highlight-province="${escapeHtml(record?.province ?? "")}" ${record ? "" : "disabled"}>
+      <span class="ops-label">${escapeHtml(highlight.label)}</span>
+      <h3>${escapeHtml(name)}</h3>
+      <p>${record ? escapeHtml(highlight.value(record)) : "No verified provincial value is available."}</p>
+      <span class="focus-meta"><span class="focus-status">${escapeHtml(highlight.note)}</span><span>${record ? "View on map ↗" : ""}</span></span>
+    </button>`;
+  }).join("");
+  grid.querySelectorAll("[data-highlight-province]").forEach((button) => {
     button.addEventListener("click", () => {
-      const municipality = state.municipalities.find((item) => item.id === button.dataset.focusId);
-      if (municipality) void selectMunicipality(municipality);
+      const province = state.geographies.find((item) =>
+        item.level === "ADM1" && item.name === button.dataset.highlightProvince
+      );
+      if (province) void selectGeography(province);
     });
   });
 }
@@ -5598,7 +5620,7 @@ async function initialize() {
   const sharedQuarter = sharedParams.get("quarter");
   if (/^\d{4}Q[1-4]$/.test(sharedQuarter ?? "")) state.labourQuarter = sharedQuarter;
   bindEvents();
-  renderFocusCards();
+  renderNationalHighlights();
   renderNationalMetrics();
   renderDetail();
   updateNavigation();
@@ -5653,7 +5675,7 @@ async function initialize() {
     void loadProvincialLabourData();
     void loadProvincialGdpData(state.economyMapYear).then(() => renderNationalMetrics());
     loadNationalDashboardEconomy();
-    renderFocusCards();
+    renderNationalHighlights();
     renderNationalMetrics();
     setMapLayer(startupCollection);
     renderMapComparisonSelection();
