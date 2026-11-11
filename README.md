@@ -14,7 +14,11 @@ npm start
 
 Open <http://127.0.0.1:3000>. Set `PORT` to change the port. The server binds to loopback by default; set `HOST=0.0.0.0` only when intentionally exposing it on a trusted network.
 
-The map and bundled source catalogue also work from a static development server such as VS Code Live Server at `frontend/html/index.html`. When using Live Server, keep `npm start` running in a separate terminal: the dashboard's Census 2022 profiles and map layers, provincial unemployment, finance, climate, audit records, and publications are served through the local Node API at `http://127.0.0.1:3000`. If the API is stopped, the bundled boundaries can still display, but API-backed indicators will be unavailable; start the API and reload the page.
+The map and bundled data work from a static host such as GitHub Pages or VS Code Live Server at `frontend/html/index.html`. Bundled Census 2011/2022 profiles and map layers, provincial unemployment, provincial GDP-R, 2021 IEC seat counts, and all boundary levels load without a Node server. National Treasury finance, documents and capital acquisition, NASA POWER climate, World Bank indicators, and live publication feeds require the Node API; these views report when that API is unavailable instead of inventing or silently omitting data.
+
+## GitHub Pages
+
+The root `index.html` forwards visitors to the browser application at `frontend/html/index.html`. GitHub Pages serves static files only; it does not run `backend/server.js`. The app uses bundled datasets for Census profiles and map layers, provincial unemployment and GDP-R, and 2021 IEC seat counts. Treasury finance and capital-acquisition data, climate normals, World Bank indicators, and live publication feeds need a separately hosted Node API. Never point a public deployment at a developer's `127.0.0.1` address.
 
 Run the API and data checks:
 

@@ -44,6 +44,7 @@ const state = {
   censusRequestId: 0,
   censusCache: new Map(),
   censusRequests: new Map(),
+  staticDataPromise: null,
   overviewCensusRequestId: 0,
   profileSummaryRequestId: 0,
   comparisonRequestId: 0,
@@ -128,6 +129,10 @@ const viewCopy = {
 
 const mapElement = document.querySelector("#map");
 const appRoot = new URL("../", document.currentScript.src);
+const staticDeployment = location.hostname !== "localhost" &&
+  location.hostname !== "127.0.0.1" &&
+  location.port !== "5500" &&
+  location.port !== "3000";
 const apiOrigin = location.port === "5500"
   ? `${location.protocol}//127.0.0.1:3000`
   : location.origin;
@@ -142,18 +147,346 @@ const workspaceGrid = document.querySelector("#workspace-grid");
 const alternateView = document.querySelector("#alternate-view");
 
 async function getJson(url) {
-  const response = await fetch(new URL(url, apiOrigin), { headers: { accept: "application/json" } });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${response.status}).`);
+  if (staticDeployment) return getStaticApiResponse(url);
+  try {
+    const response = await fetch(new URL(url, apiOrigin), { headers: { accept: "application/json" } });
+    if (!response.ok) {
+      if (response.status === 404) return getStaticApiResponse(url);
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || `Request failed (${response.status}).`);
+    }
+    return response.json();
+  } catch (error) {
+    if (error instanceof TypeError) return getStaticApiResponse(url);
+    throw error;
   }
-  return response.json();
+}
+
+function parseBundledCsv(text, filename) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  const contents = text.replace(/^\uFEFF/, "");
+  for (let index = 0; index < contents.length; index += 1) {
+    const character = contents[index];
+    if (quoted) {
+      if (character === '"' && contents[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        field += character;
+      }
+    } else if (character === '"') {
+      quoted = true;
+    } else if (character === ",") {
+      row.push(field);
+      field = "";
+    } else if (character === "\n") {
+      row.push(field.replace(/\r$/, ""));
+      if (row.some((value) => value !== "")) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += character;
+    }
+  }
+  if (quoted) throw new Error(`Bundled dataset ${filename} has an unterminated quoted field.`);
+  if (field !== "" || row.length) {
+    row.push(field.replace(/\r$/, ""));
+    if (row.some((value) => value !== "")) rows.push(row);
+  }
+  if (rows.length < 2) throw new Error(`Bundled dataset ${filename} has no data rows.`);
+  const headers = rows[0].map((header) => header.trim());
+  if (new Set(headers).size !== headers.length || headers.some((header) => !header)) {
+    throw new Error(`Bundled dataset ${filename} has invalid or duplicate columns.`);
+  }
+  return rows.slice(1).map((values, rowIndex) => {
+    if (values.length !== headers.length) {
+      throw new Error(`Bundled dataset ${filename} row ${rowIndex + 2} has an unexpected number of columns.`);
+    }
+    return Object.fromEntries(headers.map((header, column) => {
+      const value = values[column].trim();
+      const numeric = value === "" ? null : Number(value);
+      return [header, value !== "" && Number.isFinite(numeric) ? numeric : value || null];
+    }));
+  });
+}
+
+function normalizeStaticName(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase()
+    .replace(/\b(local|district|metropolitan)?\s*municipality\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function loadStaticData() {
+  if (state.staticDataPromise) return state.staticDataPromise;
+  state.staticDataPromise = (async () => {
+    const [peopleText, ageText, housingText, electricityText, councillors, labour, gdp] = await Promise.all([
+      getStaticText("assets/data/person-indicators-muni.csv"),
+      getStaticText("assets/data/age-distribution-muni.csv"),
+      getStaticText("assets/data/housing-info-muni.csv"),
+      getStaticText("assets/data/electricity-lighting-muni.csv"),
+      getStaticJson("assets/data/municipal-councillors-2021.json"),
+      getStaticJson("assets/data/provincial-unemployment.json"),
+      getStaticJson("assets/data/provincial-gdp-r.json")
+    ]);
+    const people = parseBundledCsv(peopleText, "person-indicators-muni.csv");
+    const agesByCode = new Map(parseBundledCsv(ageText, "age-distribution-muni.csv")
+      .map((record) => [record.muni_code, record]));
+    const housingByCode = new Map(parseBundledCsv(housingText, "housing-info-muni.csv")
+      .map((record) => [record.muni_code, record]));
+    const censusByCode = new Map(people.map((record) => {
+      const age = agesByCode.get(record.muni_code);
+      const housing = housingByCode.get(record.muni_code);
+      if (!age || !housing || age.name !== record.name || housing.name !== record.name) {
+        throw new Error(`Bundled Census tables do not match for municipality ${record.muni_code}.`);
+      }
+      const metadata = new Set(["prov_code", "dc_code", "muni_code", "name"]);
+      return [record.muni_code, {
+        ...record,
+        ...Object.fromEntries(Object.entries(age).filter(([key]) => !metadata.has(key))),
+        ...Object.fromEntries(Object.entries(housing).filter(([key]) => !metadata.has(key)))
+      }];
+    }));
+    const electricityByCode = new Map(parseBundledCsv(electricityText, "electricity-lighting-muni.csv")
+      .map((record) => [record.muni_code, {
+        name: record.name,
+        share2011: record.electricity_lighting_share_2011,
+        share2022: record.electricity_lighting_share_2022
+      }]));
+    if (censusByCode.size !== 213 || electricityByCode.size !== 213 ||
+      councillors.totalMunicipalities !== 213) {
+      throw new Error("Bundled Census, electricity or IEC data is incomplete; expected all 213 municipalities.");
+    }
+    return { censusByCode, electricityByCode, councillors, labour, gdp };
+  })().catch((error) => {
+    state.staticDataPromise = null;
+    throw error;
+  });
+  return state.staticDataPromise;
+}
+
+function staticCensusRecord(municipality, data) {
+  if (municipality.level !== "ADM3") return null;
+  const specialCodes = new Map([
+    ["greater tubatse/fetakgomo", "LIM476"],
+    ["kai garib", "NC082"],
+    ["khai-ma", "NC067"],
+    ["kheis", "NC084"],
+    ["mafikeng", "NW383"],
+    ["mbizana", "EC443"],
+    ["mbombela", "MP326"],
+    ["modimolle/mookgophong", "LIM368"],
+    ["sol plaatjie", "NC091"],
+    ["ventersdorp/tlokwe", "NW405"]
+  ]);
+  const explicitCode = specialCodes.get(normalizeStaticName(municipality.name));
+  if (explicitCode) return data.censusByCode.get(explicitCode) ?? null;
+  const provinceCodes = new Map([
+    ["eastern cape", "EC"], ["free state", "FS"], ["gauteng", "GP"],
+    ["kwazulu-natal", "KZN"], ["limpopo", "LP"], ["mpumalanga", "MP"],
+    ["north west", "NW"], ["northern cape", "NC"], ["nothern cape", "NC"],
+    ["western cape", "WC"]
+  ]);
+  const provinceCode = provinceCodes.get(normalizeStaticName(municipality.province));
+  return [...data.censusByCode.values()].find((record) =>
+    record.prov_code === provinceCode &&
+    normalizeStaticName(record.name) === normalizeStaticName(municipality.name)
+  ) ?? null;
+}
+
+function staticCensusSource() {
+  return {
+    publisher: "Statistics South Africa",
+    title: "Census 2022: Provinces at a Glance",
+    publicationDate: "2023-10-10",
+    reportingPeriods: [2011, 2022],
+    url: "https://census.statssa.gov.za/assets/documents/2022/Provinces_at_a_Glance.pdf",
+    extractionUrl: "https://github.com/afrith/census-2022-muni-stats",
+    extractionDescription: "Cleaned municipal tables extracted from the Stats SA publication; Stats SA is the original data source."
+  };
+}
+
+function staticElectricitySource() {
+  return {
+    publisher: "Statistics South Africa",
+    title: "Census 2022 Municipal fact sheet",
+    reportNumber: "03-01-82",
+    reportingPeriods: [2011, 2022],
+    indicator: "Households reporting electricity as the main source of energy for lighting",
+    unit: "% of households",
+    url: "https://census.statssa.gov.za/assets/documents/2022/Census_2022_Municipal_factsheet-Web.pdf",
+    note: "This household indicator describes the reported main source of energy for lighting. It does not measure grid connection status, electricity availability or service reliability."
+  };
+}
+
+async function getStaticApiResponse(path) {
+  const url = new URL(path, location.href);
+  const data = await loadStaticData();
+  const censusMatch = url.pathname.match(/\/api\/municipalities\/([^/]+)\/census$/);
+  if (censusMatch) {
+    const municipality = state.municipalities.find((item) => item.id === decodeURIComponent(censusMatch[1]));
+    if (!municipality) throw new Error("Municipality not found in bundled geography.");
+    const record = staticCensusRecord(municipality, data);
+    if (!record) return { municipality, census: null, availability: "The bundled Census dataset contains municipality-level records only." };
+    const electricity = data.electricityByCode.get(record.muni_code);
+    if (!electricity) throw new Error(`No electricity-lighting source record matches Census code ${record.muni_code}.`);
+    return {
+      municipality,
+      census: {
+        officialCode: record.muni_code,
+        districtCode: record.dc_code,
+        provinceCode: record.prov_code,
+        indicators: record
+      },
+      source: staticCensusSource(),
+      electricity: {
+        indicators: {
+          electricityLightingSharePercent2011: electricity.share2011,
+          electricityLightingSharePercent2022: electricity.share2022
+        },
+        source: staticElectricitySource()
+      },
+      matchMethod: "Bundled Census code matched by municipality name and province."
+    };
+  }
+
+  if (url.pathname.endsWith("/api/census/municipalities")) {
+    const year = Number(url.searchParams.get("year") ?? "2022");
+    if (![2011, 2022].includes(year)) throw new Error("Census reporting year must be 2011 or 2022.");
+    const records = state.municipalities.flatMap((municipality) => {
+      const census = staticCensusRecord(municipality, data);
+      const electricity = census && data.electricityByCode.get(census.muni_code);
+      const population = census?.[`total_pop_${year}`];
+      const households = census?.[`households_${year}`];
+      const waterSchemeHouseholds = census?.[`water_scheme_${year}`];
+      const areaKm2 = census?.area_km2;
+      if (![population, households, waterSchemeHouseholds, areaKm2].every(Number.isFinite) ||
+        !electricity || areaKm2 <= 0) return [];
+      return [{
+        id: municipality.id,
+        name: municipality.name,
+        province: municipality.province,
+        censusCode: census.muni_code,
+        year,
+        population,
+        households,
+        waterSchemeHouseholds,
+        waterSchemeSharePercent: Number(((waterSchemeHouseholds / households) * 100).toFixed(2)),
+        electricityLightingSharePercent: year === 2011 ? electricity.share2011 : electricity.share2022,
+        sourceAreaKm2: areaKm2,
+        populationDensityPerKm2: Number((population / areaKm2).toFixed(2))
+      }];
+    });
+    return {
+      year,
+      total: records.length,
+      source: "Statistics South Africa · Census 2022: Provinces at a Glance",
+      sourceUrl: staticCensusSource().url,
+      electricitySource: staticElectricitySource(),
+      methodology: "Population density is calculated as source-reported total population divided by the bundled Census area. Water scheme share is calculated from source-reported household counts. This is a derived thematic view, not an official statistical classification.",
+      records
+    };
+  }
+
+  const politicsMatch = url.pathname.match(/\/api\/municipalities\/([^/]+)\/politics$/);
+  if (politicsMatch) {
+    const municipality = state.municipalities.find((item) => item.id === decodeURIComponent(politicsMatch[1]));
+    const census = municipality && staticCensusRecord(municipality, data);
+    const election = data.councillors.records.find((record) => record.municipalityCode === census?.muni_code);
+    if (!municipality || !election) throw new Error("No matching bundled IEC 2021 councillor record was found.");
+    return {
+      municipality,
+      election: {
+        year: 2021,
+        publishedDate: data.councillors.source.publishedDate,
+        municipalityCode: election.municipalityCode,
+        totalSeats: election.totalSeats,
+        parties: election.parties,
+        source: data.councillors.source
+      },
+      latestElection: {
+        year: 2026,
+        checkedDate: "2026-11-10",
+        update: "The IEC has published 2026 election information; this bundled static version does not contain a verified 2026 municipal seat dataset. Consult the IEC for current results.",
+        resultsUrl: "https://results.elections.org.za/home/Downloads/ME-Results",
+        wardCouncillorsUrl: "https://www.elections.org.za/pw/StatsData/List-Of-Current-Ward-Councillors"
+      }
+    };
+  }
+
+  if (url.pathname.endsWith("/api/labour/provinces")) {
+    return { ...data.labour, totalProvinces: new Set(data.labour.records.map((record) => record.province)).size };
+  }
+
+  if (url.pathname.endsWith("/api/economy/provinces")) {
+    const year = Number(url.searchParams.get("year") ?? "2024");
+    if (!data.gdp.years.includes(year)) throw new Error(`GDP-R reporting year ${year} is not available in the bundled dataset.`);
+    const yearKey = String(year);
+    return {
+      year,
+      availableYears: data.gdp.years,
+      unit: data.gdp.source.unit,
+      national: {
+        gdpCurrentPricesRandMillions: data.gdp.national.gdpCurrentPricesRandMillions[yearKey],
+        gdpConstant2015PricesRandMillions: data.gdp.national.gdpConstant2015PricesRandMillions[yearKey],
+        realGdpGrowthPercent: data.gdp.national.realGdpGrowthPercent[yearKey]
+      },
+      source: data.gdp.source,
+      records: data.gdp.provinces.map((record) => ({
+        province: record.province,
+        gdpCurrentPricesRandMillions: record.gdpCurrentPricesRandMillions[yearKey],
+        gdpContributionPercent: record.gdpContributionPercent[yearKey],
+        gdpConstant2015PricesRandMillions: record.gdpConstant2015PricesRandMillions[yearKey],
+        realGdpGrowthPercent: record.realGdpGrowthPercent[yearKey],
+        industries: Object.entries(record.industryGvaCurrentPricesRandMillions).map(([activity, values]) => ({
+          activity,
+          gvaCurrentPricesRandMillions: values[yearKey]
+        }))
+      }))
+    };
+  }
+
+  if (url.pathname.endsWith("/api/integrations")) {
+    const loadedSourceIds = new Set([
+      "geoboundaries", "stats-sa", "stats-sa-electricity", "stats-sa-gdp-r",
+      "stats-sa-qlfs", "iec-council-2021"
+    ]);
+    const checkedAt = new Date().toISOString();
+    return {
+      checkedAt,
+      integrations: state.sources.map((source) => ({
+        id: source.id,
+        name: source.name,
+        status: loadedSourceIds.has(source.id) ? "loaded" : "unavailable",
+        checkedAt,
+        detail: loadedSourceIds.has(source.id)
+          ? "Bundled, source-attributed data is available in this static deployment."
+          : "This provider requires the Node API, which GitHub Pages does not run. Its original source link remains available."
+      }))
+    };
+  }
+
+  throw new Error("This data view requires the hosted CivicStats API. GitHub Pages serves the bundled Census, IEC 2021, provincial GDP-R, unemployment, and boundary data only.");
 }
 
 async function getStaticJson(path) {
   const response = await fetch(new URL(path, appRoot), { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`Could not load bundled data (${response.status}).`);
   return response.json();
+}
+
+async function getStaticText(path) {
+  const response = await fetch(new URL(path, appRoot), { headers: { accept: "text/csv" } });
+  if (!response.ok) throw new Error(`Could not load bundled data (${response.status}).`);
+  return response.text();
 }
 
 function pointInRing(point, ring) {
@@ -2578,7 +2911,9 @@ async function updateProfileSummary(selected) {
     "Boundary vintage 2020 · geoBoundaries.",
     censusLoaded ? "Stats SA Census 2022 municipal profile loaded." : "",
     labourRecord && period ? `Stats SA QLFS provincial estimate · ${period.label}.` : "",
-    "National Treasury finance data loads on demand."
+    staticDeployment
+      ? "Treasury finance, climate and live publication data require a separately hosted Node API."
+      : "National Treasury finance data loads on demand."
   ].filter(Boolean).join(" ");
 }
 
