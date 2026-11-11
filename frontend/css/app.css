@@ -756,3 +756,5 @@ body { font-size: 14px; line-height: 1.5; }
   .compare-mobile-data { display: grid; gap: 10px; margin-top: 10px; }
   .compare-mobile-card { min-width: 0; }
 }
+
+.map-legend-band-rank { display: inline-grid; width: 19px; height: 19px; flex: 0 0 auto; place-items: center; border: 1px solid #85918b; color: var(--text); font: 10px var(--mono); }

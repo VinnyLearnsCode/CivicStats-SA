@@ -3652,17 +3652,23 @@ function renderMapLegend() {
     const swatch = document.createElement("i");
     swatch.className = "map-legend-swatch";
     swatch.style.backgroundColor = color;
+    const rank = document.createElement("span");
+    rank.className = "map-legend-band-rank";
+    rank.textContent = String(index + 1);
     const range = document.createElement("span");
     const upper = breaks[index] ?? values.at(-1);
     const precision = 1;
     const suffix = state.mapLayer === "population" ? " people/km²" : "%";
+    const band = index === 0 ? "Lowest" : index === colors.length - 1 ? "Highest" : "";
+    const label = band ? `Band ${index + 1} · ${band}` : `Band ${index + 1}`;
     if (index === 0) {
-      range.textContent = `≤ ${formatCensusNumber(upper, precision)}${suffix}`;
+      range.textContent = `${label}: ≤ ${formatCensusNumber(upper, precision)}${suffix}`;
+    } else if (index === colors.length - 1) {
+      range.textContent = `${label}: > ${formatCensusNumber(breaks[index - 1], precision)}${suffix}`;
     } else {
-      const lower = breaks[index - 1];
-      range.textContent = `${formatCensusNumber(lower, precision)}–${formatCensusNumber(upper, precision)}${suffix}`;
+      range.textContent = `${label}: > ${formatCensusNumber(breaks[index - 1], precision)} to ≤ ${formatCensusNumber(upper, precision)}${suffix}`;
     }
-    row.append(swatch, range);
+    row.append(swatch, rank, range);
     items.append(row);
   });
   const layerMetadata = state.mapLayer === "unemployment"
@@ -3716,7 +3722,7 @@ function renderMapLegend() {
   interpretationNote.textContent = interpretation;
   const scaleNote = document.createElement("span");
   scaleNote.className = "legend-note";
-  scaleNote.textContent = "Colours are grouped into five bands for the areas currently shown. Use the value in each area’s tooltip for precise comparisons.";
+  scaleNote.textContent = "Band 1 is lowest and Band 5 is highest. Ranges are recalculated for the areas shown. Point to an area for its exact value, or open the data table for a text list.";
   const missing = document.createElement("span");
   missing.className = "map-legend-range";
   const missingSwatch = document.createElement("i");
