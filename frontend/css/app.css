@@ -736,3 +736,23 @@ body { font-size: 14px; line-height: 1.5; }
 .retry-button { margin-top: 9px; }
 .empty-data .retry-button { align-self: flex-start; }
 .map-legend-items > .retry-button { align-self: flex-start; }
+
+.compare-mobile-data { display: none; }
+.compare-scroll-note { display: none; }
+.compare-mobile-card { padding: 12px; border: 1px solid var(--border); background: #171d1b; }
+.compare-mobile-card h4 { margin: 0 0 10px; color: var(--accent-soft); font-size: 14px; font-weight: 500; }
+.compare-mobile-card dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; margin: 0; }
+.compare-mobile-card dt, .compare-mobile-card dd { margin: 0; padding: 8px 0; border-top: 1px solid var(--border-soft); font-size: 11px; line-height: 1.45; }
+.compare-mobile-card dt { color: var(--muted); }
+.compare-mobile-card dd { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
+@media (max-width: 640px) {
+  .compare-scroll-note { display: block; margin: 7px 0 0; color: var(--muted); font-size: 10px; }
+  .compare-metadata-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+  .compare-metadata-wrap .compare-table { min-width: 520px; }
+  .compare-metadata-wrap .compare-table th:first-child,
+  .compare-metadata-wrap .compare-table td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); box-shadow: 2px 0 5px #0005; }
+  .compare-metadata-wrap .compare-table th:first-child { z-index: 2; }
+  .compare-census-wrap { display: none; }
+  .compare-mobile-data { display: grid; gap: 10px; margin-top: 10px; }
+  .compare-mobile-card { min-width: 0; }
+}

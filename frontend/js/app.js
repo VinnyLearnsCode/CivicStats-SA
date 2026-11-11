@@ -4432,10 +4432,12 @@ function renderComparison() {
   ).join("");
   return `<div class="compare-controls">${selectFields}<div class="view-actions"><button class="action-button" id="compare-export" disabled title="Export source-linked Census indicators for the selected municipalities">Export comparison data</button><button class="action-button" id="compare-share" disabled title="Copy a link that opens this municipality comparison">Copy comparison link</button></div></div>
     <h3 class="comparison-subheading">Available geographic metadata</h3>
-    <div class="data-table-wrap"><table class="data-table compare-table"><thead><tr><th>Property</th><th data-compare-heading="0">Geography 1</th><th data-compare-heading="1">Geography 2</th><th data-compare-heading="2">Geography 3</th></tr></thead><tbody>${metadataRows}</tbody></table></div>
+    <p class="compare-scroll-note">Swipe horizontally to view each selected municipality.</p>
+    <div class="data-table-wrap compare-metadata-wrap"><table class="data-table compare-table"><thead><tr><th>Property</th><th data-compare-heading="0">Geography 1</th><th data-compare-heading="1">Geography 2</th><th data-compare-heading="2">Geography 3</th></tr></thead><tbody>${metadataRows}</tbody></table></div>
     <h3 class="comparison-subheading">Census population &amp; households · 2011 and 2022</h3>
     <p class="source-check-note" id="compare-census-note">Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.</p>
-    <div class="data-table-wrap"><table class="data-table compare-table"><thead><tr><th>Indicator</th><th data-indicator-heading="0">Geography 1</th><th data-indicator-heading="1">Geography 2</th><th data-indicator-heading="2">Geography 3</th></tr></thead><tbody>${indicatorRows}</tbody></table></div>`;
+    <div class="compare-mobile-data" id="compare-mobile-data" aria-live="polite"></div>
+    <div class="data-table-wrap compare-census-wrap"><table class="data-table compare-table" id="compare-census-table"><thead><tr><th>Indicator</th><th data-indicator-heading="0">Geography 1</th><th data-indicator-heading="1">Geography 2</th><th data-indicator-heading="2">Geography 3</th></tr></thead><tbody>${indicatorRows}</tbody></table></div>`;
 }
 
 function renderAlternateView() {
@@ -4615,7 +4617,46 @@ function updateComparisonIndicators(selects) {
     });
   });
   const note = alternateView.querySelector("#compare-census-note");
-  if (note && errors.length) note.textContent = `Census comparison data could not be loaded: ${errors.join(" · ")}`;
+  if (note) note.textContent = errors.length
+    ? `Census comparison data could not be loaded: ${errors.join(" · ")}`
+    : "Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.";
+  renderMobileComparison(selects);
+}
+
+function renderMobileComparison(selects) {
+  const container = alternateView.querySelector("#compare-mobile-data");
+  if (!container) return;
+  container.replaceChildren();
+  const selected = selects
+    .map((select) => ({ id: select.value, municipality: state.municipalities.find((item) => item.id === select.value) }))
+    .filter((entry) => entry.id && entry.municipality);
+  if (!selected.length) {
+    const empty = document.createElement("p");
+    empty.className = "compare-empty";
+    empty.textContent = "Choose a municipality above to see its figures.";
+    container.append(empty);
+    return;
+  }
+  const rows = [...alternateView.querySelectorAll("#compare-census-table tbody tr")];
+  selected.forEach(({ id, municipality }) => {
+    const card = document.createElement("article");
+    card.className = "compare-mobile-card";
+    const heading = document.createElement("h4");
+    heading.textContent = municipality.name;
+    const list = document.createElement("dl");
+    rows.forEach((row) => {
+      const label = row.cells[0]?.textContent ?? "Indicator";
+      const columnIndex = selects.findIndex((select) => select.value === id);
+      const value = row.querySelector(`[data-index="${columnIndex}"][data-census-indicator]`)?.textContent ?? "—";
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const description = document.createElement("dd");
+      description.textContent = value;
+      list.append(term, description);
+    });
+    card.append(heading, list);
+    container.append(card);
+  });
 }
 
 async function exportComparison() {
