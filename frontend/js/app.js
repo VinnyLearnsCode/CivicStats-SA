@@ -2,6 +2,9 @@ const state = {
   view: "dashboard",
   tab: "overview",
   boundaryLevel: "ADM3",
+  autoBoundaryDetail: true,
+  autoBoundaryReady: false,
+  autoBoundaryRequest: null,
   mapLayer: "population",
   mapDataTableOpen: false,
   mapRovingId: null,
@@ -984,6 +987,7 @@ async function copyShareableViewLink() {
   }
   url.searchParams.set("layer", state.mapLayer);
   url.searchParams.set("boundaryLevel", state.boundaryLevel);
+  url.searchParams.set("autoDetail", state.autoBoundaryDetail ? "1" : "0");
   url.searchParams.set("censusYear", String(state.censusMapYear));
   url.searchParams.set("gdpYear", String(state.economyMapYear));
   url.searchParams.set("quarter", state.labourQuarter);
@@ -4677,7 +4681,7 @@ function handleMapRegionKeydown(layer, event) {
   layers[nextIndex].getElement()?.focus();
 }
 
-function setMapLayer(collection) {
+function setMapLayer(collection, { fitBounds = true } = {}) {
   if (state.boundaryLayer) state.map.removeLayer(state.boundaryLayer);
   state.boundaryLayer = L.geoJSON(collection, {
     style: styleForFeature,
@@ -4709,7 +4713,7 @@ function setMapLayer(collection) {
   if (state.mapDataTableOpen) renderMapDataTable();
   const bounds = state.boundaryLayer.getBounds();
   if (state.boundaryLevel === "ADM3" && bounds.isValid()) state.nationalBounds = bounds;
-  if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
+  if (fitBounds && bounds.isValid()) state.map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
   refreshSelectionLayer();
 }
 
@@ -4727,7 +4731,7 @@ async function ensureBoundaryCollection(level) {
   return state.collections.get(level);
 }
 
-async function changeBoundaryLevel(level) {
+async function changeBoundaryLevel(level, { preserveView = false } = {}) {
   const collection = await ensureBoundaryCollection(level);
   state.boundaryLevel = level;
   const provinceLayer = ["unemployment", "economy"].includes(state.mapLayer);
@@ -4736,7 +4740,38 @@ async function changeBoundaryLevel(level) {
     void loadProvincialGdpData(state.economyMapYear);
     void loadProvincialLabourData();
   }
-  setMapLayer(collection);
+  setMapLayer(collection, { fitBounds: !preserveView });
+}
+
+function boundaryLevelForZoom() {
+  if (["unemployment", "economy"].includes(state.mapLayer)) return "ADM1";
+  const zoom = state.map?.getZoom() ?? 5;
+  if (zoom < 5.8) return "ADM1";
+  if (zoom < 7.4) return "ADM2";
+  return "ADM3";
+}
+
+function syncBoundaryLevelToZoom() {
+  if (!state.autoBoundaryDetail || !state.autoBoundaryReady || !state.map) return;
+  const target = boundaryLevelForZoom();
+  if (target === state.boundaryLevel || state.autoBoundaryRequest) return;
+  state.autoBoundaryRequest = changeBoundaryLevel(target, { preserveView: true })
+    .then(() => {
+      if (state.autoBoundaryDetail) {
+        document.querySelector("#boundary-level").value = state.boundaryLevel;
+      }
+    })
+    .catch(() => {
+      state.autoBoundaryDetail = false;
+      document.querySelector("#auto-boundary-detail").checked = false;
+      showToast("Automatic boundary detail could not load. Choose a boundary level manually.");
+    })
+    .finally(() => {
+      state.autoBoundaryRequest = null;
+      if (state.autoBoundaryDetail && boundaryLevelForZoom() !== state.boundaryLevel) {
+        requestAnimationFrame(syncBoundaryLevelToZoom);
+      }
+    });
 }
 
 async function selectGeography(item, { focus = true } = {}) {
@@ -4847,6 +4882,8 @@ function toggleMapComparison(id) {
 
 function resetMapToNational() {
   if (state.view !== "dashboard") setView("dashboard");
+  state.autoBoundaryDetail = true;
+  document.querySelector("#auto-boundary-detail").checked = true;
   searchInput.value = "";
   renderSearchResults("");
   state.comparisonMode = false;
@@ -5804,11 +5841,17 @@ function bindEvents() {
     button.addEventListener("click", () => setView(button.dataset.view));
   });
   document.querySelector("#boundary-level").addEventListener("change", async (event) => {
+    state.autoBoundaryDetail = false;
+    document.querySelector("#auto-boundary-detail").checked = false;
     try {
       await changeBoundaryLevel(event.target.value);
     } catch (error) {
       showToast(`Unable to load boundaries: ${error.message}`);
     }
+  });
+  document.querySelector("#auto-boundary-detail").addEventListener("change", (event) => {
+    state.autoBoundaryDetail = event.currentTarget.checked;
+    if (state.autoBoundaryDetail) syncBoundaryLevelToZoom();
   });
   document.querySelector("#map-census-year").addEventListener("change", (event) => {
     void loadCensusMapData(Number(event.target.value));
@@ -6000,6 +6043,14 @@ async function initialize() {
   if ([2011, 2022].includes(sharedCensusYear)) state.censusMapYear = sharedCensusYear;
   const sharedBoundaryLevel = sharedParams.get("boundaryLevel");
   if (["ADM1", "ADM2", "ADM3"].includes(sharedBoundaryLevel)) state.boundaryLevel = sharedBoundaryLevel;
+  const sharedAutoDetail = sharedParams.get("autoDetail");
+  if (sharedAutoDetail === "0" || sharedAutoDetail === "1") {
+    state.autoBoundaryDetail = sharedAutoDetail === "1";
+  } else if (["ADM1", "ADM2", "ADM3"].includes(sharedBoundaryLevel)) {
+    state.autoBoundaryDetail = false;
+  }
+  document.querySelector("#boundary-level").value = state.boundaryLevel;
+  document.querySelector("#auto-boundary-detail").checked = state.autoBoundaryDetail;
   const sharedGdpYear = Number(sharedParams.get("gdpYear"));
   if (Number.isInteger(sharedGdpYear) && sharedGdpYear >= 2014 && sharedGdpYear <= 2024) state.economyMapYear = sharedGdpYear;
   const sharedQuarter = sharedParams.get("quarter");
@@ -6042,6 +6093,7 @@ async function initialize() {
   }
   state.map.on("zoomend", () => {
     document.querySelector("#map-scale").textContent = state.map.getZoom().toFixed(1);
+    syncBoundaryLevelToZoom();
   });
 
   try {
@@ -6051,6 +6103,7 @@ async function initialize() {
     state.geographies = geographies;
     updateNationalProfileSummary();
     state.collections.set("ADM3", collection);
+    state.autoBoundaryReady = true;
     let startupCollection = collection;
     if (state.boundaryLevel !== "ADM3") {
       try {
