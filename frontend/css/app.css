@@ -175,7 +175,7 @@ a { color: inherit; }
 .section-tab.active::after { position: absolute; right: 8px; bottom: -1px; left: 8px; height: 2px; background: var(--accent); content: ""; }
 
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) 315px; gap: 13px; padding: 14px 18px 22px 25px; }
-.workspace-grid.section-detail-active #focus-panel, .workspace-grid.section-detail-active .intelligence-panel, .workspace-grid.section-detail-active .lower-grid { display: none; }
+.workspace-grid.section-detail-active #focus-panel, .workspace-grid.section-detail-active .national-snapshot-panel, .workspace-grid.section-detail-active .intelligence-panel, .workspace-grid.section-detail-active .lower-grid { display: none; }
 .workspace-grid.map-compact .map-panel:not(:fullscreen) .map-wrap { height: 190px; min-height: 0; max-height: none; transition: height 180ms ease; }
 .workspace-grid.map-compact .map-panel:not(:fullscreen) .layer-option { display: none; }
 .workspace-grid.map-compact .map-panel:not(:fullscreen) .layer-option.selected { display: flex; }
