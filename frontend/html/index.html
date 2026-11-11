@@ -94,7 +94,7 @@
             </label>
             <span class="topbar-divider"></span>
             <span class="data-status"><i></i> DATA STATUS <strong id="data-status-label">BOUNDARIES LOADED</strong></span>
-            <button class="icon-button" id="about-button" aria-label="About CivicStats SA" title="About CivicStats SA">i</button>
+            <button class="icon-button" id="about-button" aria-label="Open indicator guide" title="Indicator guide">?</button>
           </div>
         </header>
 
@@ -320,6 +320,16 @@
       </main>
     </div>
     <div class="mobile-scrim" id="mobile-scrim" hidden></div>
+    <dialog class="indicator-guide" id="indicator-guide" aria-labelledby="indicator-guide-title">
+      <header class="indicator-guide-header">
+        <div><span class="panel-kicker">CIVICSTATS SA · HOW TO READ THE DATA</span><h2 id="indicator-guide-title">Indicator guide</h2><p>Definitions, reporting periods, sources and limits for the measures shown in CivicStats.</p></div>
+        <button class="square-button" id="indicator-guide-close" type="button" aria-label="Close indicator guide">×</button>
+      </header>
+      <label class="indicator-guide-search-label" for="indicator-guide-search">SEARCH INDICATORS</label>
+      <input id="indicator-guide-search" class="indicator-guide-search" type="search" placeholder="Try population, unemployment, budget…" autocomplete="off">
+      <p class="indicator-guide-count" id="indicator-guide-count" aria-live="polite"></p>
+      <div class="indicator-guide-list" id="indicator-guide-list"></div>
+    </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </body>
 </html>

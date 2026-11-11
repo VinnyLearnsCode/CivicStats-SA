@@ -66,6 +66,30 @@ const state = {
   toastTimer: null
 };
 
+const indicatorGuideEntries = [
+  { name: "Population", category: "Demographics", definition: "The number of people counted for a municipality in the relevant Census. It is a count, not a current population estimate.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "Census figures describe their census dates; they are not updated between censuses." },
+  { name: "Households", category: "Demographics", definition: "The Census count of households in the municipality. Household totals are separate from the population count.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "Do not compare a household count with a population count as if they were the same unit." },
+  { name: "Average household size", category: "Demographics", definition: "The average number of people per household in the source period.", period: "Census 2022", source: "Statistics South Africa · Census", caveat: "An average can hide differences between households and neighbourhoods." },
+  { name: "Population growth", category: "Demographics", definition: "The reported change in population between the 2011 and 2022 Census records.", period: "2011–2022", source: "Statistics South Africa · Census", caveat: "This is a historical, inter-censal measure, not a forecast or current annual growth rate." },
+  { name: "Age and school attendance", category: "Demographics", definition: "Counts for source-defined age bands and people aged 5–24 recorded as attending school.", period: "Census 2022", source: "Statistics South Africa · Census", caveat: "Use the age range and Census year shown with each value." },
+  { name: "Water scheme household share", category: "Household services", definition: "The share of households reporting the source’s water-scheme category, calculated from the reported household count and total households.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "This household response does not measure current supply continuity, water quality or pressure." },
+  { name: "Flush toilet household share", category: "Household services", definition: "The share of households in the source’s flush-toilet category, calculated from the reported count and total households.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "It describes the reported household facility category, not whether a facility is working today." },
+  { name: "Electricity for cooking", category: "Household services", definition: "The share of households reporting electricity as their main cooking energy source.", period: "Census 2011 and 2022 where available", source: "Statistics South Africa · Census", caveat: "Cooking energy is different from electricity access, connection status or reliable supply." },
+  { name: "Electricity for lighting", category: "Household services", definition: "The share of households reporting electricity as their main source of energy for lighting.", period: "Stats SA municipal fact sheets · 2011 and 2022", source: "Statistics South Africa", caveat: "It is not a measure of grid connection, availability or load-shedding reliability." },
+  { name: "Water interruptions", category: "Household services", definition: "Historical household-reported service interruption measures in the Stats SA service-delivery publication.", period: "2011 and 2022 source periods", source: "Statistics South Africa · service-delivery report", caveat: "These are historical survey measures, not live municipal outage monitoring." },
+  { name: "Official unemployment rate", category: "Labour", definition: "Unemployed people as a share of the labour force under the official QLFS definition.", period: "Quarterly; the selected quarter is shown", source: "Statistics South Africa · Quarterly Labour Force Survey", caveat: "CivicStats has province-level estimates only. They must not be read as municipality rates." },
+  { name: "Expanded unemployment (LU3)", category: "Labour", definition: "The share of the expanded labour force that is unemployed or belongs to the potential labour force under Stats SA’s LU3 definition.", period: "Quarterly; the selected quarter is shown", source: "Statistics South Africa · Quarterly Labour Force Survey", caveat: "This is a different measure from the official unemployment rate and is also province-level here." },
+  { name: "GDP-R and industry activity", category: "Economy", definition: "Regional gross domestic product and gross value added by published industry. Current-price values are nominal; constant-price growth is adjusted for prices.", period: "Annual; year selector shows the period", source: "Statistics South Africa · GDP-R (P0441.2)", caveat: "The source is province-level. CivicStats does not infer municipal GDP or industry output." },
+  { name: "Municipal finance line items", category: "Municipal finance", definition: "Municipality-reported revenue and expenditure categories from National Treasury’s municipal finance data.", period: "Financial year and record type are shown", source: "National Treasury · Municipal Money", caveat: "Budget, adjusted budget and audited actual are distinct record types. These are municipal accounts, not local GDP or household income." },
+  { name: "Capital acquisition categories", category: "Municipal finance", definition: "Section 71 capital-asset spending grouped by accounting and functional categories.", period: "Financial year and record type are shown", source: "National Treasury · Municipal Money", caveat: "These rows are not a named-project list and do not identify each project’s schedule or contractor." },
+  { name: "Audit opinion", category: "Governance", definition: "The audit outcome recorded for the municipality and financial year, with a report link when the source provides one.", period: "Financial year ending shown per record", source: "Auditor-General South Africa via National Treasury", caveat: "A missing record or report link is not evidence of a clean audit or that no audit occurred." },
+  { name: "Council seats", category: "Governance", definition: "Party seat counts in the dated municipal council snapshot, with ward and proportional-representation seats kept separate.", period: "IEC 2021 election snapshot", source: "Electoral Commission of South Africa", caveat: "The 2021 snapshot is not a current 2026 council result." },
+  { name: "Climate normals", category: "Climate", definition: "Long-run temperature and precipitation climatology for a representative point in the selected geography.", period: "The displayed climatology date range accompanies the result", source: "NASA POWER", caveat: "These are gridded climate normals, not a local weather forecast or a measurement at every point in the municipality." },
+  { name: "Named infrastructure projects", category: "Projects", definition: "Project descriptions, source classifications and expenditure phases published in the Municipal Money project register.", period: "Selected financial years from 2017/2018 through 2023/2024", source: "National Treasury and OpenUp · Municipal Money", caveat: "The source reports completeness checks in progress. A project type such as “New” is not proof that work is complete." },
+  { name: "National economic indicators", category: "Economy", definition: "South Africa-wide indicators such as GDP and sector value added shown for their latest available source years.", period: "Latest available year is shown per indicator", source: "World Bank · World Development Indicators", caveat: "These are national figures, not provincial or municipal estimates." },
+  { name: "Calculated area", category: "Geography", definition: "Approximate area calculated from the displayed administrative boundary polygon.", period: "Boundary vintage 2020", source: "geoBoundaries · ADM3", caveat: "This is a geometric calculation, not an official land-survey area." }
+];
+
 const tabContent = {
   overview: {
     kicker: "OVERVIEW",
@@ -744,6 +768,48 @@ function showToast(message) {
   toast.classList.add("visible");
   clearTimeout(state.toastTimer);
   state.toastTimer = setTimeout(() => toast.classList.remove("visible"), 3200);
+}
+
+function renderIndicatorGuide(query = "") {
+  const list = document.querySelector("#indicator-guide-list");
+  const count = document.querySelector("#indicator-guide-count");
+  if (!list || !count) return;
+  const term = query.trim().toLocaleLowerCase();
+  const entries = indicatorGuideEntries.filter((entry) =>
+    Object.values(entry).some((value) => value.toLocaleLowerCase().includes(term))
+  );
+  count.textContent = `${entries.length} indicator${entries.length === 1 ? "" : "s"}${term ? " match your search" : " explained"}.`;
+  list.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "indicator-guide-empty";
+    empty.textContent = "No indicators match that search. Try a source, topic or reporting period.";
+    list.append(empty);
+    return;
+  }
+  entries.forEach((entry) => {
+    const article = document.createElement("article");
+    article.className = "indicator-guide-entry";
+    const header = document.createElement("header");
+    const title = document.createElement("h3");
+    title.textContent = entry.name;
+    const category = document.createElement("span");
+    category.className = "indicator-guide-category";
+    category.textContent = entry.category;
+    header.append(title, category);
+    const definition = document.createElement("p");
+    definition.textContent = entry.definition;
+    const metadata = document.createElement("dl");
+    [["Period", entry.period], ["Source", entry.source], ["Read with care", entry.caveat]].forEach(([label, value]) => {
+      const termNode = document.createElement("dt");
+      termNode.textContent = label;
+      const description = document.createElement("dd");
+      description.textContent = value;
+      metadata.append(termNode, description);
+    });
+    article.append(header, definition, metadata);
+    list.append(article);
+  });
 }
 
 function safeText(value) {
@@ -4703,7 +4769,19 @@ function bindEvents() {
   });
   document.querySelector("#download-profile").addEventListener("click", exportSelectedProfile);
   document.querySelector("#about-button").addEventListener("click", () => {
-    showToast("Census 2022 figures, provincial Stats SA labour estimates, Treasury financial data, NASA POWER climate normals, and South African Cities Network publications are available with source links.");
+    const guide = document.querySelector("#indicator-guide");
+    renderIndicatorGuide(document.querySelector("#indicator-guide-search").value);
+    guide.showModal();
+    document.querySelector("#indicator-guide-search").focus();
+  });
+  document.querySelector("#indicator-guide-close").addEventListener("click", () =>
+    document.querySelector("#indicator-guide").close()
+  );
+  document.querySelector("#indicator-guide-search").addEventListener("input", (event) =>
+    renderIndicatorGuide(event.target.value)
+  );
+  document.querySelector("#indicator-guide").addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
   });
   document.querySelector("#sidebar-toggle").addEventListener("click", () => {
     document.body.classList.toggle("sidebar-collapsed");

@@ -367,7 +367,10 @@ test("the browser application is served with security headers", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   assert.equal(response.headers.get("x-frame-options"), "DENY");
-  assert.match(await response.text(), /National geographic explorer/);
+  const html = await response.text();
+  assert.match(html, /National geographic explorer/);
+  assert.match(html, /id="indicator-guide"/);
+  assert.match(html, /aria-label="Open indicator guide"/);
 });
 
 test("the stylesheet, browser application and bundled source catalogue are served", async () => {
@@ -384,6 +387,8 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /project-search-input/);
   assert.match(applicationScript, /compare-share/);
   assert.match(applicationScript, /searchParams\.set\("compare"/);
+  assert.match(applicationScript, /indicatorGuideEntries/);
+  assert.match(applicationScript, /renderIndicatorGuide/);
   assert.equal(sourceCatalogue.status, 200);
   const sources = await sourceCatalogue.json();
   assert.ok(sources.some((source) => source.id === "geoboundaries"));
