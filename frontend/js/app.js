@@ -5640,6 +5640,7 @@ async function initialize() {
     zoomControl: false,
     attributionControl: true,
     scrollWheelZoom: true,
+    doubleClickZoom: false,
     minZoom: 4,
     maxZoom: 10,
     maxBounds: [[-36, 14], [-21, 34]],
