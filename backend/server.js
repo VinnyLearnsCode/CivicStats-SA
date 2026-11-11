@@ -2072,6 +2072,8 @@ export async function createAppServer({
           censusCode: censusRecord.muni_code,
           year: censusYear,
           population,
+          population2011: censusRecord.total_pop_2011,
+          population2022: censusRecord.total_pop_2022,
           populationGrowthPercent: Number.isFinite(censusRecord.growth_rate_2011_to_2022)
             ? censusRecord.growth_rate_2011_to_2022
             : null,
@@ -2107,7 +2109,7 @@ export async function createAppServer({
           url: "https://census.statssa.gov.za/assets/documents/2022/Census_2022_Municipal_factsheet-Web.pdf",
           note: "This household indicator describes the reported main source of energy for lighting. It does not measure grid connection status, electricity availability or service reliability."
         },
-        methodology: "Population density is calculated as the source-reported total population divided by the area_km2 value in the bundled Census extract. Water scheme share is calculated from source-reported household counts. Municipality boundaries use geoBoundaries ADM3, 2020 vintage; this is a derived thematic view and not an official statistical classification.",
+        methodology: "Municipal population density uses source-reported population divided by Census source area. Water scheme shares use source-reported household counts. For district and province map layers, matched municipal Census records are aggregated: totals are summed, density divides summed population by summed municipal source area, household shares use household weighting, and population change uses summed 2011 and 2022 populations. Electricity shares use Stats SA published municipal percentages and are therefore approximate at aggregated levels. Geography crosswalks use representative points within geoBoundaries 2020 polygons; parent-level map values are derived thematic views, not official Stats SA district or province tabulations.",
         records
       });
       return;

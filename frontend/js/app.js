@@ -6,6 +6,7 @@ const state = {
   mapDataTableOpen: false,
   mapRovingId: null,
   censusMapRecords: new Map(),
+  censusMapAggregates: new Map(),
   censusMapYear: 2022,
   censusMapRequestId: 0,
   censusMapError: null,
@@ -3641,6 +3642,59 @@ function refreshSelectionLayer() {
   }).addTo(state.map);
 }
 
+function censusMapRecordForFeature(feature) {
+  const properties = feature?.properties;
+  if (!properties || !["ADM1", "ADM2", "ADM3"].includes(properties.shapeType)) return null;
+  if (properties.shapeType === "ADM3") return state.censusMapRecords.get(properties.shapeID) ?? null;
+
+  const cacheKey = `${state.censusMapYear}:${properties.shapeType}:${properties.shapeID}`;
+  if (state.censusMapAggregates.has(cacheKey)) return state.censusMapAggregates.get(cacheKey);
+  const parentKey = properties.shapeType === "ADM1" ? "provinceId" : "districtId";
+  const members = state.municipalities.filter((municipality) => municipality[parentKey] === properties.shapeID);
+  const records = members.map((municipality) => state.censusMapRecords.get(municipality.id));
+  if (!members.length || records.some((record) => !record)) {
+    state.censusMapAggregates.set(cacheKey, null);
+    return null;
+  }
+
+  const sum = (key) => records.reduce((total, record) => total + record[key], 0);
+  const population = sum("population");
+  const population2011 = sum("population2011");
+  const population2022 = sum("population2022");
+  const households = sum("households");
+  const waterSchemeHouseholds = sum("waterSchemeHouseholds");
+  const sourceAreaKm2 = sum("sourceAreaKm2");
+  const weightedElectricityHouseholds = records.reduce((total, record) =>
+    total + record.electricityLightingSharePercent * record.households / 100, 0);
+  const aggregate = {
+    id: properties.shapeID,
+    name: properties.shapeName,
+    year: state.censusMapYear,
+    population,
+    population2011,
+    population2022,
+    populationGrowthPercent: population2011 > 0
+      ? Number(((population2022 / population2011 - 1) * 100).toFixed(2))
+      : null,
+    households,
+    waterSchemeHouseholds,
+    waterSchemeSharePercent: households > 0
+      ? Number((waterSchemeHouseholds / households * 100).toFixed(2))
+      : null,
+    electricityLightingSharePercent: households > 0
+      ? Number((weightedElectricityHouseholds / households * 100).toFixed(2))
+      : null,
+    sourceAreaKm2,
+    populationDensityPerKm2: sourceAreaKm2 > 0
+      ? Number((population / sourceAreaKm2).toFixed(2))
+      : null,
+    aggregated: true,
+    municipalityCount: members.length
+  };
+  state.censusMapAggregates.set(cacheKey, aggregate);
+  return aggregate;
+}
+
 function mapIndicatorValue(feature) {
   if (state.mapLayer === "unemployment") {
     if (feature.properties.shapeType !== "ADM1") return null;
@@ -3653,24 +3707,26 @@ function mapIndicatorValue(feature) {
     return state.provincialEconomyData?.records
       .find((record) => record.province === province)?.gdpContributionPercent ?? null;
   }
-  if (state.boundaryLevel !== "ADM3" || feature.properties.shapeType !== "ADM3") return null;
-  const record = state.censusMapRecords.get(feature.properties.shapeID);
+  const record = censusMapRecordForFeature(feature);
   if (!record) return null;
   return state.mapLayer === "population"
     ? record.populationDensityPerKm2
     : state.mapLayer === "growth"
       ? record.populationGrowthPercent
       : state.mapLayer === "water"
-      ? record.waterSchemeSharePercent
-      : state.mapLayer === "electricity"
-        ? record.electricityLightingSharePercent
-        : null;
+        ? record.waterSchemeSharePercent
+        : state.mapLayer === "electricity"
+          ? record.electricityLightingSharePercent
+          : null;
 }
 
 function activeMapRecords() {
   if (state.mapLayer === "unemployment") return [...state.labourMapRecords.values()];
   if (state.mapLayer === "economy") return state.provincialEconomyData?.records ?? [];
-  return [...state.censusMapRecords.values()];
+  if (state.mapLayer === "boundaries") return [...state.censusMapRecords.values()];
+  return (state.boundaryLayer?.getLayers() ?? [])
+    .map((layer) => censusMapRecordForFeature(layer.feature))
+    .filter(Boolean);
 }
 
 function mapIndicatorBreaks() {
@@ -3718,14 +3774,6 @@ function mapTooltip(feature) {
     ? canonicalProvinceName(feature.properties.shapeName)
     : feature.properties.shapeName;
   if (state.mapLayer === "boundaries") return name;
-  if (state.mapLayer === "growth") {
-    if (feature.properties.shapeType !== "ADM3") return `${name} · municipality values only`;
-    const record = state.censusMapRecords.get(feature.properties.shapeID);
-    const growth = record?.populationGrowthPercent;
-    return Number.isFinite(growth)
-      ? `${name} · reported Census population growth 2011–2022: ${formatCensusNumber(growth, 1)}%`
-      : `${name} · Census population growth unavailable for 2011–2022`;
-  }
   if (state.mapLayer === "unemployment") {
     if (feature.properties.shapeType !== "ADM1") return `${name} · select Provinces to show provincial estimates`;
     const record = state.labourMapRecords.get(name);
@@ -3740,15 +3788,25 @@ function mapTooltip(feature) {
     if (!record) return `${name} · no GDP-R data for ${state.economyMapYear}`;
     return `${name} · ${state.economyMapYear} share of national GDP: ${record.gdpContributionPercent.toFixed(1)}% · nominal GDP R${formatCensusNumber(record.gdpCurrentPricesRandMillions)} million`;
   }
-  const record = state.censusMapRecords.get(feature.properties.shapeID);
-  if (!record || feature.properties.shapeType !== "ADM3") return `${name} · municipality values only`;
+  const record = censusMapRecordForFeature(feature);
+  if (!record) return `${name} · complete Census municipality coverage unavailable`;
+  const aggregatePrefix = record.aggregated
+    ? `${record.municipalityCount} matched municipalities · `
+    : "";
+  if (state.mapLayer === "growth") {
+    const growth = record.populationGrowthPercent;
+    const method = record.aggregated ? "derived population change" : "reported population growth";
+    return Number.isFinite(growth)
+      ? `${name} · ${aggregatePrefix}Census ${method} 2011–2022: ${formatCensusNumber(growth, 1)}%`
+      : `${name} · Census population growth unavailable for 2011–2022`;
+  }
   if (state.mapLayer === "population") {
-    return `${name} · Census ${record.year} population density: ${formatCensusNumber(record.populationDensityPerKm2, 1)} people/km²`;
+    return `${name} · ${aggregatePrefix}Census ${record.year} population density: ${formatCensusNumber(record.populationDensityPerKm2, 1)} people/km²`;
   }
   if (state.mapLayer === "electricity") {
-    return `${name} · Census ${record.year}: ${formatCensusNumber(record.electricityLightingSharePercent, 1)}% of households reported electricity as their main lighting source`;
+    return `${name} · ${aggregatePrefix}Census ${record.year}: ${formatCensusNumber(record.electricityLightingSharePercent, 1)}% of households reported electricity as their main lighting source`;
   }
-  return `${name} · Census ${record.year} households reporting water scheme: ${formatCensusNumber(record.waterSchemeSharePercent, 1)}%`;
+  return `${name} · ${aggregatePrefix}Census ${record.year} households reporting water scheme: ${formatCensusNumber(record.waterSchemeSharePercent, 1)}%`;
 }
 
 function mapTablePresentation() {
@@ -3779,7 +3837,19 @@ function renderMapDataTable() {
   const presentation = mapTablePresentation();
   const geographyLevel = formatBoundaryLevel(state.boundaryLevel);
   title.textContent = `${presentation.label} · ${geographyLevel}`;
-  description.textContent = `Reporting period: ${presentation.period}. Values are ${presentation.unit}. “Not available” means no compatible source value was loaded for that area.`;
+  const aggregateNote = state.boundaryLevel === "ADM3" || state.mapLayer === "boundaries"
+    ? ""
+    : state.mapLayer === "population"
+      ? " District and province values sum matched municipal Census populations and Census source areas."
+      : state.mapLayer === "growth"
+        ? " District and province values calculate change from summed municipal 2011 and 2022 Census populations."
+        : state.mapLayer === "water"
+          ? " District and province shares divide summed water-scheme households by summed households."
+          : " District and province electricity shares are household-weighted averages of published municipal percentages, so are approximate.";
+  const geographyNote = aggregateNote
+    ? " Municipal membership follows representative points within geoBoundaries 2020 polygons; these are derived views, not official Stats SA parent-area tabulations."
+    : "";
+  description.textContent = `Reporting period: ${presentation.period}. Values are ${presentation.unit}. “Not available” means no compatible source value was loaded for that area.${aggregateNote}${geographyNote}`;
   content.replaceChildren();
   const collection = state.collections.get(state.boundaryLevel);
   if (!collection?.features?.length) {
@@ -4009,7 +4079,19 @@ function renderMapLegend() {
   missing.append(missingSwatch, missingLabel);
   const note = document.createElement("span");
   note.className = "legend-note";
-  note.textContent = `${layerMetadata.detail} ${layerMetadata.updated}. Neutral fill indicates missing data.`;
+  const aggregateNote = state.boundaryLevel === "ADM3" || ["boundaries", "unemployment", "economy"].includes(state.mapLayer)
+    ? ""
+    : state.mapLayer === "population"
+      ? " Larger-area values sum matched municipal populations and source areas."
+      : state.mapLayer === "growth"
+        ? " Larger-area growth is calculated from summed 2011 and 2022 municipal population totals."
+        : state.mapLayer === "water"
+          ? " Larger-area shares divide summed municipal water-scheme households by summed households."
+          : " Larger-area electricity shares are household-weighted averages of published municipal percentages and are approximate.";
+  const geographyNote = aggregateNote
+    ? " Municipality membership is crosswalked by representative point to geoBoundaries 2020 polygons; parent-area results are derived, not official Stats SA tabulations."
+    : "";
+  note.textContent = `${layerMetadata.detail} ${layerMetadata.updated}.${aggregateNote}${geographyNote} Neutral fill indicates missing data.`;
   items.append(interpretationNote, scaleNote, missing, note);
   if (layerMetadata.url) {
     const sourceLink = document.createElement("a");
@@ -4178,8 +4260,8 @@ function updateMapLayerControls() {
   document.querySelectorAll('input[name="map-layer"]').forEach((input) => {
     const thematic = input.value !== "boundaries";
     const provinceOnly = input.value === "unemployment" || input.value === "economy";
-    const municipalOnly = ["population", "growth", "water", "electricity"].includes(input.value);
-    const supported = provinceOnly || municipalOnly;
+    const censusLayer = ["population", "growth", "water", "electricity"].includes(input.value);
+    const supported = provinceOnly || censusLayer;
     const profileDataOnly = ["finance", "infrastructure"].includes(input.value);
     const available = input.value === "unemployment"
       ? unemploymentAvailable
@@ -4187,13 +4269,13 @@ function updateMapLayerControls() {
         ? provincialGdpAvailable
         : input.value === "growth"
           ? growthAvailable
-        : input.value === "electricity"
-          ? electricityAvailable
-          : municipalOnly
-            ? censusAvailable
-            : false;
-    const requiredLevel = provinceOnly ? "ADM1" : "ADM3";
-    const enabled = thematic && supported && available && state.boundaryLevel === requiredLevel;
+          : input.value === "electricity"
+            ? electricityAvailable
+            : censusLayer
+              ? censusAvailable
+              : false;
+    const levelCompatible = !provinceOnly || state.boundaryLevel === "ADM1";
+    const enabled = thematic && supported && available && levelCompatible;
     const loading = input.value === "unemployment"
       ? state.labourMapLoading
       : input.value === "economy"
@@ -4214,24 +4296,24 @@ function updateMapLayerControls() {
           ? "Treasury finance facts load on demand; no complete, period-compatible municipal measure is loaded for map shading"
           : "No complete, period-compatible municipal infrastructure indicator is currently loaded"
         : !available
-            ? error
-              ? `Verified source data unavailable: ${error}`
-              : loading
-                ? "Loading verified source data"
-                : "Verified source data is unavailable"
-            : state.boundaryLevel !== requiredLevel
-              ? provinceOnly
-                ? "Change the boundary level to Provinces; GDP-R and unemployment values are province-only"
-                : "Change the boundary level to Municipalities to show Census indicators"
-              : provinceOnly
-                ? input.value === "unemployment"
-                  ? `Statistics South Africa QLFS ${state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter} provincial data`
-                  : `Statistics South Africa GDP-R ${state.economyMapYear} provincial GDP contribution`
-                : input.value === "electricity"
-                  ? `Stats SA Census ${state.censusMapYear} household share reporting electricity as the main lighting source; not connection status or reliability`
-                  : input.value === "growth"
-                    ? "Statistics South Africa Census reported population growth, 2011–2022"
-                    : `Statistics South Africa Census ${state.censusMapYear} municipal data`;
+          ? error
+            ? `Verified source data unavailable: ${error}`
+            : loading
+              ? "Loading verified source data"
+              : "Verified source data is unavailable"
+          : !levelCompatible
+            ? input.value === "unemployment"
+              ? "Statistics South Africa QLFS estimates are available at province level only; choose Provinces"
+              : "Statistics South Africa GDP-R values are available at province level only; choose Provinces"
+            : provinceOnly
+              ? input.value === "unemployment"
+                ? `Statistics South Africa QLFS ${state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter} provincial data`
+                : `Statistics South Africa GDP-R ${state.economyMapYear} provincial GDP contribution`
+              : input.value === "electricity"
+                ? `Stats SA Census ${state.censusMapYear} household share reporting electricity as the main lighting source; larger areas are household-weighted municipal aggregates, not connection status or reliability`
+                : input.value === "growth"
+                  ? "Statistics South Africa Census population change, 2011–2022; larger areas use summed municipal population totals"
+                  : `Statistics South Africa Census ${state.censusMapYear} municipal data; district and province values aggregate matched municipalities`;
     label.classList.toggle("unavailable", thematic && !enabled);
     label.classList.toggle("selected", input.value === state.mapLayer);
     const status = label.querySelector(".layer-state");
@@ -4239,10 +4321,10 @@ function updateMapLayerControls() {
     else if (thematic && !supported) status.textContent = "NO DATA";
     else if (thematic && !available && loading) status.textContent = "LOADING";
     else if (thematic && !available) status.textContent = "NO DATA";
-    else if (thematic && state.boundaryLevel !== requiredLevel) status.textContent = provinceOnly ? "PROVINCE ONLY" : "MUNICIPAL ONLY";
+    else if (thematic && !levelCompatible) status.textContent = "PROVINCE ONLY";
     else if (thematic && input.value === "unemployment") status.textContent = state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter;
     else if (thematic && input.value === "economy") status.textContent = String(state.economyMapYear);
-    else if (thematic) status.textContent = String(state.censusMapYear);
+    else if (thematic && censusLayer) status.textContent = state.boundaryLevel === "ADM3" ? String(state.censusMapYear) : `${state.censusMapYear} · DERIVED`;
     else status.textContent = input.value === state.mapLayer ? "ACTIVE" : "";
   });
 }
@@ -4284,8 +4366,10 @@ async function loadCensusMapData(year) {
       throw new Error(`Census ${year} data did not match every municipal boundary.`);
     }
     state.censusMapRecords = records;
-    state.populationGrowthLayerAvailable = [...records.values()].some((record) =>
-      Number.isFinite(record.populationGrowthPercent)
+    state.censusMapAggregates.clear();
+    state.populationGrowthLayerAvailable = [...records.values()].every((record) =>
+      Number.isFinite(record.population2011) && record.population2011 > 0 &&
+      Number.isFinite(record.population2022) && record.population2022 >= 0
     );
     state.censusMapError = null;
     state.censusMapLoading = false;
@@ -4442,10 +4526,7 @@ async function changeBoundaryLevel(level) {
   const collection = await ensureBoundaryCollection(level);
   state.boundaryLevel = level;
   const provinceLayer = ["unemployment", "economy"].includes(state.mapLayer);
-  const municipalityLayer = ["population", "growth", "water", "electricity"].includes(state.mapLayer);
-  if ((level !== "ADM1" && provinceLayer) || (level !== "ADM3" && municipalityLayer)) {
-    state.mapLayer = "boundaries";
-  }
+  if (level !== "ADM1" && provinceLayer) state.mapLayer = "boundaries";
   if (level === "ADM1") {
     void loadProvincialGdpData(state.economyMapYear);
     void loadProvincialLabourData();
