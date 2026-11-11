@@ -943,6 +943,40 @@ function setView(view) {
   if (!workspace) renderAlternateView();
 }
 
+async function copyShareableViewLink() {
+  const url = new URL(location.href);
+  url.search = "";
+  url.hash = "";
+  if (state.view !== "dashboard") url.searchParams.set("view", state.view);
+  if (state.view === "comparisons") {
+    const ids = (state.comparisonSelections ?? []).filter(Boolean).slice(0, 3);
+    if (ids.length >= 2) url.searchParams.set("compare", ids.join(","));
+  } else if (state.selected?.id) {
+    url.searchParams.set("geography", state.selected.id);
+    if (tabContent[state.tab]) url.searchParams.set("tab", state.tab);
+  }
+  url.searchParams.set("layer", state.mapLayer);
+  url.searchParams.set("boundaryLevel", state.boundaryLevel);
+  url.searchParams.set("censusYear", String(state.censusMapYear));
+  url.searchParams.set("gdpYear", String(state.economyMapYear));
+  url.searchParams.set("quarter", state.labourQuarter);
+  try {
+    await navigator.clipboard.writeText(url.href);
+    showToast("Link copied. It opens this area, map layer and reporting period.");
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = url.href;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.append(input);
+    input.select();
+    const copied = document.execCommand("copy");
+    input.remove();
+    showToast(copied ? "Link copied. It opens this area, map layer and reporting period." : `Copy this link: ${url.href}`);
+  }
+}
+
 function setTab(tab) {
   if (!tabContent[tab]) return;
   state.tab = tab;
@@ -5199,6 +5233,7 @@ function bindEvents() {
     renderMapComparisonSelection();
   });
   document.querySelector("#download-profile").addEventListener("click", exportSelectedProfile);
+  document.querySelector("#share-view-button").addEventListener("click", copyShareableViewLink);
   document.querySelector("#about-button").addEventListener("click", () => {
     const guide = document.querySelector("#indicator-guide");
     renderIndicatorGuide(document.querySelector("#indicator-guide-search").value);
@@ -5296,6 +5331,19 @@ function bindEvents() {
 }
 
 async function initialize() {
+  const sharedParams = new URLSearchParams(location.search);
+  const sharedLayer = sharedParams.get("layer");
+  if (["boundaries", "population", "growth", "unemployment", "economy", "water", "electricity"].includes(sharedLayer)) {
+    state.mapLayer = sharedLayer;
+  }
+  const sharedCensusYear = Number(sharedParams.get("censusYear"));
+  if ([2011, 2022].includes(sharedCensusYear)) state.censusMapYear = sharedCensusYear;
+  const sharedBoundaryLevel = sharedParams.get("boundaryLevel");
+  if (["ADM1", "ADM2", "ADM3"].includes(sharedBoundaryLevel)) state.boundaryLevel = sharedBoundaryLevel;
+  const sharedGdpYear = Number(sharedParams.get("gdpYear"));
+  if (Number.isInteger(sharedGdpYear) && sharedGdpYear >= 2014 && sharedGdpYear <= 2024) state.economyMapYear = sharedGdpYear;
+  const sharedQuarter = sharedParams.get("quarter");
+  if (/^\d{4}Q[1-4]$/.test(sharedQuarter ?? "")) state.labourQuarter = sharedQuarter;
   bindEvents();
   renderFocusCards();
   renderNationalMetrics();
@@ -5338,22 +5386,30 @@ async function initialize() {
     state.sources = sources;
     state.municipalities = municipalities;
     state.geographies = geographies;
+    state.collections.set("ADM3", collection);
+    let startupCollection = collection;
+    if (state.boundaryLevel !== "ADM3") {
+      try {
+        startupCollection = await ensureBoundaryCollection(state.boundaryLevel);
+      } catch {
+        state.boundaryLevel = "ADM3";
+      }
+    }
     void loadLiveSourceData();
     void loadCensusMapData(state.censusMapYear);
     void loadProvincialLabourData();
     void loadProvincialGdpData(state.economyMapYear);
-    state.collections.set("ADM3", collection);
     renderFocusCards();
     renderNationalMetrics();
-    setMapLayer(collection);
+    setMapLayer(startupCollection);
     renderMapComparisonSelection();
     document.querySelector("#map-loading").hidden = true;
     document.querySelector("#boundary-count").textContent =
-      `${health.boundaryLevels.ADM3} municipal boundaries`;
+      `${startupCollection.features.length} ${state.boundaryLevel === "ADM1" ? "provinces" : state.boundaryLevel === "ADM2" ? "districts & metros" : "municipal boundaries"}`;
     document.querySelector("#map-location").textContent =
       `SOUTH AFRICA · ${health.boundaryLevels.ADM1} PROVINCES`;
     document.querySelector("#mobile-scrim").hidden = true;
-    const params = new URLSearchParams(location.search);
+    const params = sharedParams;
     const comparisonIds = [...new Set((params.get("compare") ?? "").split(",").filter(Boolean))]
       .filter((id) => state.municipalities.some((item) => item.id === id))
       .slice(0, 3);
@@ -5371,6 +5427,10 @@ async function initialize() {
     } else {
       const johannesburg = state.municipalities.find((item) => item.name === "City of Johannesburg");
       if (johannesburg) updateProfile(johannesburg);
+    }
+    const requestedView = params.get("view");
+    if (requestedView && Object.hasOwn(viewCopy, requestedView) && requestedView !== "comparisons" && !comparisonIds.length) {
+      setView(requestedView);
     }
   } catch (error) {
     document.querySelector("#map-loading").hidden = true;

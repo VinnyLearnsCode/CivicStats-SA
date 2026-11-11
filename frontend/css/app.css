@@ -775,3 +775,5 @@ body { font-size: 14px; line-height: 1.5; }
 .map-table-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .map-table-heading h3 { margin: 0; }
 .map-table-heading .action-button { min-height: 36px; }
+.share-view-button { min-height: 32px; white-space: nowrap; }
+@media (max-width: 760px) { .share-view-button { padding: 0 7px; font-size: 9px; } }

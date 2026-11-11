@@ -401,6 +401,10 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /project-search-input/);
   assert.match(applicationScript, /compare-share/);
   assert.match(applicationScript, /searchParams\.set\("compare"/);
+  assert.match(applicationScript, /async function copyShareableViewLink/);
+  assert.match(applicationScript, /searchParams\.set\("boundaryLevel"/);
+  assert.match(applicationScript, /sharedParams\.get\("censusYear"\)/);
+  assert.match(applicationScript, /sharedParams\.get\("gdpYear"\)/);
   assert.match(applicationScript, /indicatorGuideEntries/);
   assert.match(applicationScript, /function metricGuideEntry/);
   assert.match(applicationScript, /function addMetricExplanation/);
@@ -427,6 +431,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(indexHtml, /role="combobox" aria-autocomplete="list"/);
   assert.match(indexHtml, /map-data-table-toggle/);
   assert.match(indexHtml, /export-map-table/);
+  assert.match(indexHtml, /id="share-view-button"/);
   assert.match(indexHtml, /aria-describedby="map-keyboard-instructions"/);
   assert.match(indexHtml, /id="map-keyboard-hint"/);
   assert.match(indexHtml, /aria-live="polite"/);
