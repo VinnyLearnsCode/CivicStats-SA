@@ -264,6 +264,28 @@ test("Census profile returns source-linked population, age and household indicat
   assert.match(sourceCsv.headers.get("content-type"), /text\/csv/);
 });
 
+test("Census 2022 provincial population totals cover all nine provinces and reconcile to Stats SA national total", async () => {
+  const response = await get("/assets/data/census-provinces-2022.json");
+  assert.equal(response.status, 200);
+  const dataset = await response.json();
+  assert.equal(dataset.source.publisher, "Statistics South Africa");
+  assert.equal(dataset.source.reportNumber, "P0301.4");
+  assert.match(dataset.source.url, /P03014_Census_2022_Statistical_Release\.pdf/);
+  assert.equal(dataset.records.length, 9);
+  assert.deepEqual(Object.fromEntries(dataset.records.map((record) => [record.province, record.population])), {
+    "Western Cape": 7433019,
+    "Eastern Cape": 7230204,
+    "Northern Cape": 1355946,
+    "Free State": 2964412,
+    "KwaZulu-Natal": 12423907,
+    "North West": 3804548,
+    "Gauteng": 15099422,
+    "Mpumalanga": 5143324,
+    "Limpopo": 6572721
+  });
+  assert.equal(dataset.records.reduce((sum, record) => sum + record.population, 0), 62027503);
+});
+
 test("Census map layers return complete 2011 and 2022 municipal measures with explicit methods", async () => {
   for (const year of [2011, 2022]) {
     const response = await get(`/api/census/municipalities?year=${year}`);

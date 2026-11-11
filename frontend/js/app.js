@@ -68,6 +68,7 @@ const state = {
   boundaryLayer: null,
   toastTimer: null
 };
+let provinceCensus2022Promise = null;
 
 const indicatorGuideEntries = [
   { name: "Population", category: "Demographics", definition: "The number of people counted for a municipality in the relevant Census. It is a count, not a current population estimate.", period: "Census 2011 and 2022", source: "Statistics South Africa · Census", caveat: "Census figures describe their census dates; they are not updated between censuses." },
@@ -1516,6 +1517,36 @@ function hasVerifiedCensusSource(result) {
     result.source.url.startsWith("https://");
 }
 
+async function getProvinceCensusPopulation(province) {
+  if (!provinceCensus2022Promise) {
+    provinceCensus2022Promise = getStaticJson("assets/data/census-provinces-2022.json").then((dataset) => {
+      const expected = [
+        "Western Cape", "Eastern Cape", "Northern Cape", "Free State", "KwaZulu-Natal",
+        "North West", "Gauteng", "Mpumalanga", "Limpopo"
+      ];
+      const records = Array.isArray(dataset.records) ? dataset.records : [];
+      const names = new Set(records.map((record) => record.province));
+      const total = records.reduce((sum, record) => sum + record.population, 0);
+      if (dataset.source?.publisher !== "Statistics South Africa" ||
+        dataset.source?.reportNumber !== "P0301.4" || dataset.source?.year !== 2022 ||
+        !dataset.source.url?.startsWith("https://") || records.length !== expected.length ||
+        names.size !== expected.length || expected.some((name) => !names.has(name)) ||
+        records.some((record) => !Number.isSafeInteger(record.population) || record.population <= 0) ||
+        total !== dataset.nationalTotal) {
+        throw new Error("Stats SA provincial Census 2022 data is incomplete or invalid.");
+      }
+      return dataset;
+    }).catch((error) => {
+      provinceCensus2022Promise = null;
+      throw error;
+    });
+  }
+  const dataset = await provinceCensus2022Promise;
+  const record = dataset.records.find((item) => item.province === province);
+  if (!record) throw new Error(`No Census 2022 population record is available for ${province}.`);
+  return { population: record.population, source: dataset.source };
+}
+
 function renderOverviewCensus(selected) {
   const requestId = ++state.overviewCensusRequestId;
   const section = appendCensusSection(
@@ -1524,6 +1555,28 @@ function renderOverviewCensus(selected) {
     "Official Stats SA municipal population and household counts. Provincial unemployment is shown separately in the profile."
   );
   addDetailMessage(section, "Loading Census data", `Loading the source-linked profile for ${selected.name}…`, "finance-loading");
+  if (selected.level === "ADM1") {
+    void getProvinceCensusPopulation(selected.name).then((result) => {
+      if (requestId !== state.overviewCensusRequestId ||
+        state.tab !== "overview" || state.selected?.id !== selected.id) return;
+      section.replaceChildren();
+      const metrics = document.createElement("div");
+      metrics.className = "census-metric-grid";
+      appendCensusMetric(metrics, "Population · Census 2022", formatCensusNumber(result.population), "people · official provincial total");
+      section.append(metrics);
+      const source = document.createElement("p");
+      source.className = "finance-source-note";
+      source.textContent = `${result.source.publisher} · ${result.source.title} · ${result.source.table}.`;
+      section.append(source);
+      addSourceLink(section, result.source.url, "Open original Stats SA publication ↗");
+    }).catch((error) => {
+      if (requestId !== state.overviewCensusRequestId ||
+        state.tab !== "overview" || state.selected?.id !== selected.id) return;
+      section.replaceChildren();
+      addDetailError(section, "Provincial Census data unavailable", `${error.message} Check your connection and try the request again.`, () => renderDetail());
+    });
+    return;
+  }
   if (selected.level !== "ADM3") {
     section.replaceChildren();
     addDetailMessage(section, "Municipality-level Census data", "Select a municipality to view its Census population and household figures.");
@@ -3385,21 +3438,20 @@ async function updateProfileSummary(selected) {
   const sourceLabel = document.querySelector("#source-indicator-label");
   const sourceNote = document.querySelector("#source-summary-note");
   population.textContent = "Loading…";
-  populationNote.textContent = "Stats SA municipal profile";
+  populationNote.textContent = selected.level === "ADM1"
+    ? "Stats SA provincial Census total"
+    : "Stats SA municipal profile";
   unemployment.textContent = "Loading…";
   unemploymentNote.textContent = "Stats SA QLFS · provincial estimate only";
   status.textContent = "LOADING VERIFIED INDICATORS";
   periodLabel.textContent = "—";
   statusDot.classList.add("muted");
 
-  if (selected.level !== "ADM3") {
-    population.textContent = "Data unavailable";
-    populationNote.textContent = "The loaded Census profile is municipality-level only";
-  }
-
   const censusRequest = selected.level === "ADM3"
     ? getMunicipalityCensus(selected.id)
-    : Promise.resolve(null);
+    : selected.level === "ADM1"
+      ? getProvinceCensusPopulation(selected.name)
+      : Promise.resolve(null);
   const labourRequest = state.labourData
     ? Promise.resolve(state.labourData)
     : loadProvincialLabourData();
@@ -3409,7 +3461,19 @@ async function updateProfileSummary(selected) {
   let verifiedIndicators = 0;
   let censusLoaded = false;
   let censusPeriod = "";
-  if (censusResult.status === "fulfilled" && censusResult.value?.census) {
+  if (selected.level === "ADM1" && censusResult.status === "fulfilled" &&
+    Number.isSafeInteger(censusResult.value?.population) && censusResult.value?.source?.publisher === "Statistics South Africa") {
+    population.textContent = formatCensusNumber(censusResult.value.population);
+    populationNote.textContent = `${censusResult.value.source.publisher} · Census 2022 · Table 2.2`;
+    verifiedIndicators += 1;
+    censusLoaded = true;
+    censusPeriod = "Census 2022";
+  } else if (selected.level === "ADM1") {
+    population.textContent = "Unavailable";
+    populationNote.textContent = censusResult.status === "rejected"
+      ? `Provincial Census request failed: ${censusResult.reason.message}`
+      : "No verified Census population record was returned for this province";
+  } else if (censusResult.status === "fulfilled" && censusResult.value?.census) {
     const indicators = censusResult.value.census.indicators;
     const officialCode = censusResult.value.census.officialCode;
     selected.officialCode = officialCode;
@@ -3466,7 +3530,11 @@ async function updateProfileSummary(selected) {
   sourceLabel.textContent = hasVerifiedIndicators ? "LOADED" : "UNAVAILABLE";
   sourceNote.textContent = [
     "Boundary vintage 2020 · geoBoundaries.",
-    censusLoaded ? "Stats SA Census 2022 municipal profile loaded." : "",
+    censusLoaded
+      ? selected.level === "ADM1"
+        ? "Stats SA Census 2022 provincial population total loaded."
+        : "Stats SA Census 2022 municipal profile loaded."
+      : "",
     labourRecord && period ? `Stats SA QLFS provincial estimate · ${period.label}.` : "",
     staticDeployment
       ? "Treasury finance, climate and live publication data require a separately hosted Node API."

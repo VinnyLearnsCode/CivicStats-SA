@@ -1,0 +1,23 @@
+{
+  "source": {
+    "publisher": "Statistics South Africa",
+    "title": "Census 2022 Statistical Release",
+    "reportNumber": "P0301.4",
+    "table": "Table 2.2 · Distribution of the population and percentage change by province",
+    "url": "https://census.statssa.gov.za/assets/documents/2022/P03014_Census_2022_Statistical_Release.pdf",
+    "year": 2022,
+    "unit": "people"
+  },
+  "nationalTotal": 62027503,
+  "records": [
+    { "province": "Western Cape", "population": 7433019 },
+    { "province": "Eastern Cape", "population": 7230204 },
+    { "province": "Northern Cape", "population": 1355946 },
+    { "province": "Free State", "population": 2964412 },
+    { "province": "KwaZulu-Natal", "population": 12423907 },
+    { "province": "North West", "population": 3804548 },
+    { "province": "Gauteng", "population": 15099422 },
+    { "province": "Mpumalanga", "population": 5143324 },
+    { "province": "Limpopo", "population": 6572721 }
+  ]
+}
