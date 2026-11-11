@@ -212,14 +212,21 @@ a { color: inherit; }
 .services-swatch { border-color: #6e8d7e; background: #476253; }
 .layer-state { margin-left: auto; color: #69756f; font: 7px var(--mono); }
 .layer-option.selected .layer-state { color: var(--accent); }
-.map-legend { bottom: 12px; left: 12px; display: flex; min-width: 168px; flex-direction: column; gap: 5px; padding: 8px 9px; font-size: 8px; }
-.map-legend-items { display: flex; flex-direction: column; gap: 5px; }
+.map-legend { bottom: 12px; left: 12px; width: 210px; max-width: calc(100% - 24px); max-height: min(45vh, 300px); overflow: auto; font-size: 8px; }
+.map-legend-summary { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px; cursor: pointer; list-style: none; }
+.map-legend-summary::-webkit-details-marker { display: none; }
+.map-legend-summary::marker { content: ""; }
+.map-legend-summary .legend-heading { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-legend-toggle { flex: 0 0 auto; color: var(--accent-soft); font: 7px var(--mono); letter-spacing: .06em; }
+.map-legend-items { display: flex; flex-direction: column; gap: 5px; padding: 0 8px 8px; }
 .map-legend-range { display: flex; align-items: center; gap: 6px; }
 .map-legend-swatch { display: inline-block; width: 10px; height: 8px; border: 1px solid #718079; }
 .missing-swatch { background: #303936; }
 .legend-source-link { color: var(--accent-soft); font-size: 8px; text-decoration: none; }
 .legend-source-link:hover { color: var(--accent); text-decoration: underline; }
-.legend-heading { margin-bottom: 1px; }
+.map-legend[open] .map-legend-summary { border-bottom: 1px solid var(--border-soft); }
+.map-legend[open] .map-legend-items { padding-top: 7px; }
+.map-legend-items .legend-note { line-height: 1.4; overflow-wrap: anywhere; }
 .legend-line { display: inline-block; width: 14px; margin-right: 7px; border-top: 1px solid #82918a; vertical-align: 2px; }
 .legend-line.active-line { border-top: 2px solid var(--accent); }
 .legend-note { margin-top: 2px; color: #75817b; font-size: 8px; }
@@ -533,7 +540,7 @@ a { color: inherit; }
   .layer-control { top: 8px; right: 8px; width: 155px; padding: 7px; }
   .map-top-left { top: 8px; left: 8px; max-width: calc(100% - 174px); gap: 6px; padding: 5px; }
   .map-coordinate, .map-scale { font-size: 7px; }
-  .map-legend { bottom: 8px; left: 8px; min-width: 155px; }
+  .map-legend { bottom: 8px; left: 8px; width: 190px; }
   .finance-summary-grid { grid-template-columns: 1fr; }
   .leaflet-control-zoom { margin-bottom: 69px !important; }
   .map-footer { flex-wrap: wrap; gap: 4px 9px; padding: 6px 9px; }

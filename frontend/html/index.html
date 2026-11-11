@@ -187,14 +187,17 @@
                   <label class="layer-option unavailable" title="No complete, period-compatible municipal infrastructure indicator is currently loaded"><input type="radio" name="map-layer" value="infrastructure" disabled><span class="layer-swatch muted-swatch"></span><span>Infrastructure</span><span class="layer-state">NO MAP DATA</span></label>
                   <label class="layer-option unavailable" title="Loading Stats SA province-level GDP-R data"><input type="radio" name="map-layer" value="economy" disabled><span class="layer-swatch population-swatch"></span><span>Economic activity · province</span><span class="layer-state">LOADING</span></label>
                 </div>
-                <div class="map-overlay map-legend">
-                  <span class="legend-heading" id="map-legend-heading">BOUNDARY KEY</span>
+                <details class="map-overlay map-legend" id="map-legend">
+                  <summary class="map-legend-summary">
+                    <span class="legend-heading" id="map-legend-heading">BOUNDARY KEY</span>
+                    <span class="map-legend-toggle">LEGEND</span>
+                  </summary>
                   <div class="map-legend-items" id="map-legend-items">
                     <span><i class="legend-line active-line"></i>Selected municipality</span>
                     <span><i class="legend-line"></i>Municipal boundary</span>
                     <span class="legend-note">Census map layers load from the local API.</span>
                   </div>
-                </div>
+                </details>
                 <div class="map-loading" id="map-loading"><span class="spinner"></span>Loading verified boundary geometry…</div>
                 <div class="map-error" id="map-error" hidden></div>
               </div>
