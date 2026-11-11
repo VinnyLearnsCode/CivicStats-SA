@@ -394,6 +394,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(stylesheetText, /\.map-legend-band-rank/);
   assert.match(stylesheetText, /\.leaflet-interactive:focus-visible/);
   assert.match(stylesheetText, /\.metric-explainer/);
+  assert.match(stylesheetText, /\.map-table-heading/);
   assert.equal(application.status, 200);
   assert.match(application.headers.get("content-type"), /javascript/);
   const applicationScript = await application.text();
@@ -403,6 +404,9 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /indicatorGuideEntries/);
   assert.match(applicationScript, /function metricGuideEntry/);
   assert.match(applicationScript, /function addMetricExplanation/);
+  assert.match(applicationScript, /searchAliases/);
+  assert.match(applicationScript, /function addChartCsvDownload/);
+  assert.match(applicationScript, /function exportMapDataTable/);
   assert.match(applicationScript, /What this means/);
   assert.match(applicationScript, /renderIndicatorGuide/);
   assert.match(applicationScript, /Provincial economy & labour/);
@@ -422,6 +426,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   const indexHtml = await index.text();
   assert.match(indexHtml, /role="combobox" aria-autocomplete="list"/);
   assert.match(indexHtml, /map-data-table-toggle/);
+  assert.match(indexHtml, /export-map-table/);
   assert.match(indexHtml, /aria-describedby="map-keyboard-instructions"/);
   assert.match(indexHtml, /id="map-keyboard-hint"/);
   assert.match(indexHtml, /aria-live="polite"/);

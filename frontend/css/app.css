@@ -771,3 +771,7 @@ body { font-size: 14px; line-height: 1.5; }
 .metric-explainer .metric-explainer-caveat { color: #9eaaA4; }
 .metric-explainer small { display: block; margin-top: 5px; color: #93a098; font-size: 10px; line-height: 1.5; }
 @media (max-width: 640px) { .metric-explainer summary { min-height: 44px; } }
+.chart-download-button { margin-bottom: 4px; }
+.map-table-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.map-table-heading h3 { margin: 0; }
+.map-table-heading .action-button { min-height: 36px; }

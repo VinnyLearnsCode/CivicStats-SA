@@ -780,8 +780,24 @@ function renderIndicatorGuide(query = "") {
   const count = document.querySelector("#indicator-guide-count");
   if (!list || !count) return;
   const term = query.trim().toLocaleLowerCase();
+  const searchAliases = {
+    "Population": "people residents population count size",
+    "Households": "homes families housing households",
+    "Average household size": "people per home household size",
+    "Population growth": "population change increase decrease growth",
+    "Official unemployment rate": "jobs work joblessness unemployment employment",
+    "Expanded unemployment (LU3)": "jobs work joblessness unemployment lu3 discouraged job seekers",
+    "Water scheme household share": "water taps piped water services access",
+    "Flush toilet household share": "toilets sanitation services access",
+    "Electricity for lighting": "electricity power lights lighting services access",
+    "Municipal finance line items": "budget money spending income revenue expenditure municipal finances",
+    "Audit opinion": "audit clean audit governance accountability",
+    "Council seats": "election councillors parties council political seats",
+    "Climate normals": "weather rain rainfall temperature climate"
+  };
   const entries = indicatorGuideEntries.filter((entry) =>
-    Object.values(entry).some((value) => value.toLocaleLowerCase().includes(term))
+    [...Object.values(entry), searchAliases[entry.name] ?? ""]
+      .some((value) => value.toLocaleLowerCase().includes(term))
   );
   count.textContent = `${entries.length} indicator${entries.length === 1 ? "" : "s"}${term ? " match your search" : " explained"}.`;
   list.replaceChildren();
@@ -826,6 +842,10 @@ function csvEscape(value) {
 }
 
 function downloadCsv(filename, rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    showToast("There is no displayed data to download yet.");
+    return;
+  }
   const text = rows.map((row) => row.map(csvEscape).join(",")).join("\r\n");
   const blob = new Blob([`\uFEFF${text}`], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
@@ -1129,6 +1149,28 @@ function appendCensusBar(parent, label, value, maximum, note = "") {
   track.append(fill);
   row.append(heading, track);
   parent.append(row);
+  addChartCsvDownload(parent);
+}
+
+function addChartCsvDownload(chart) {
+  if (chart.dataset.exportReady === "true") return;
+  chart.dataset.exportReady = "true";
+  const button = document.createElement("button");
+  button.className = "action-button chart-download-button";
+  button.type = "button";
+  button.textContent = "Download chart data CSV";
+  button.addEventListener("click", () => {
+    const title = chart.closest(".census-section")?.querySelector("h3")?.textContent ?? "indicator-chart";
+    const slug = title.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const rows = [["Indicator", "Value", "Reporting period or note"]];
+    chart.querySelectorAll(".census-bar-row").forEach((row) => {
+      const name = row.querySelector(".census-bar-heading span")?.textContent?.trim() ?? "";
+      const amount = row.querySelector(".census-bar-heading strong")?.textContent?.trim() ?? "";
+      if (name) rows.push([name, amount, title]);
+    });
+    downloadCsv(`civicstats-${slug || "chart"}.csv`, rows);
+  });
+  chart.prepend(button);
 }
 
 function appendCensusSection(parent, titleText, description) {
@@ -3633,6 +3675,21 @@ function renderMapDataTable() {
   content.append(table);
 }
 
+function exportMapDataTable() {
+  const table = document.querySelector("#map-data-table-content table");
+  if (!table) {
+    showToast("Map data is still loading. Try the download again shortly.");
+    return;
+  }
+  const rows = [...table.querySelectorAll("tr")].map((tr) =>
+    [...tr.querySelectorAll("th,td")].map((cell) => cell.textContent.trim())
+  );
+  const label = document.querySelector("#map-data-table-title")?.textContent ?? "map-data";
+  const slug = label.toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  downloadCsv(`civicstats-${slug || "map-data"}.csv`, rows);
+  showToast("Displayed map table downloaded as CSV.");
+}
+
 function renderMapLegend() {
   const heading = document.querySelector("#map-legend-heading");
   const items = document.querySelector("#map-legend-items");
@@ -5112,6 +5169,7 @@ function bindEvents() {
     event.currentTarget.textContent = state.mapDataTableOpen ? "Hide map data table" : "View map data as a table";
     if (state.mapDataTableOpen) renderMapDataTable();
   });
+  document.querySelector("#export-map-table").addEventListener("click", exportMapDataTable);
   document.querySelector("#compare-map-toggle").addEventListener("click", async () => {
     if (state.boundaryLevel !== "ADM3") {
       try {

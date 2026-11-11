@@ -202,7 +202,7 @@
                 <button class="map-data-table-toggle" id="map-data-table-toggle" type="button" aria-expanded="false" aria-controls="map-data-table-panel">View map data as a table</button>
               </div>
               <section class="map-data-table-panel" id="map-data-table-panel" aria-label="Accessible map data table" hidden>
-                <h3 id="map-data-table-title">Map values</h3>
+                <div class="map-table-heading"><h3 id="map-data-table-title">Map values</h3><button class="action-button" id="export-map-table" type="button">Download table CSV</button></div>
                 <p id="map-data-table-description"></p>
                 <div class="data-table-wrap" id="map-data-table-content"></div>
               </section>
@@ -326,7 +326,7 @@
         <button class="square-button" id="indicator-guide-close" type="button" aria-label="Close indicator guide">×</button>
       </header>
       <label class="indicator-guide-search-label" for="indicator-guide-search">SEARCH INDICATORS</label>
-      <input id="indicator-guide-search" class="indicator-guide-search" type="search" placeholder="Try population, unemployment, budget…" autocomplete="off">
+      <input id="indicator-guide-search" class="indicator-guide-search" type="search" placeholder="Try population, jobs, services, budget…" autocomplete="off" aria-describedby="indicator-guide-count">
       <p class="indicator-guide-count" id="indicator-guide-count" aria-live="polite"></p>
       <div class="indicator-guide-list" id="indicator-guide-list"></div>
     </dialog>
