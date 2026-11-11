@@ -29,7 +29,7 @@ The root `render.yaml` configures one Node web service for both the application 
 3. Review the `civicstats-sa` service and apply the Blueprint.
 4. When the service is live, open its `onrender.com` URL. The dashboard is served at `/`, and the API is available on the same origin.
 
-The service binds to Render's required public interface and uses `/api/health` for deployment health checks. The Blueprint selects Render's free web-service plan; free instances may spin down while idle, so the first request after inactivity can take longer. This prototype does not require a database or persistent disk.
+The service binds to Render's required public interface and uses `/api/health` for deployment health checks. The Blueprint selects Render's free web-service plan; free instances may spin down while idle, so the first request after inactivity can take longer. The read-only website still works without a database. Persistent imports require a separately configured PostgreSQL database.
 
 Run the API and data checks:
 
@@ -63,7 +63,7 @@ npm test
 - The source catalogue distinguishes the locally loaded boundary dataset, verified live integrations, and official portals that do not expose a verified public structured API.
 - Reports and research show explicit empty states until verified publications are catalogued.
 
-The current data boundary is explicit: the unemployment rate is available only at province level from Stats SA's Quarterly Labour Force Survey (QLFS), not for individual municipalities. Stats SA withdrew several Census 2022 themes, including employment, due to data-quality concerns; municipality-level employment counts and industry output are therefore not imported. Stats SA GDP-R provides provincial GDP and industry value added, not municipal GDP. The municipal electricity indicator is the household-reported main source for lighting, not a grid-connection or reliability measure. Census demographics and selected household-service indicators are available, as are live Treasury municipal financial facts, Treasury capital-acquisition categories and NASA POWER representative-point climate normals. The IEC seat counts are a historical 2021 snapshot and are not current officeholder or coalition data; current 2026 reports are linked from the official IEC portal but are not bundled. Named municipal project registers, status, contractor and geolocation data are not included. Documents are linked from official sites and the Treasury audit-report catalogue; IDPs, budgets and annual reports are not individually crawled or asserted where no direct source URL was returned. CivicScore is not calculated. There is no administrator portal, authentication, PostgreSQL connection or import workflow in this prototype.
+The current data boundary is explicit: the unemployment rate is available only at province level from Stats SA's Quarterly Labour Force Survey (QLFS), not for individual municipalities. Stats SA withdrew several Census 2022 themes, including employment, due to data-quality concerns; municipality-level employment counts and industry output are therefore not imported. Stats SA GDP-R provides provincial GDP and industry value added, not municipal GDP. The municipal electricity indicator is the household-reported main source for lighting, not a grid-connection or reliability measure. Census demographics and selected household-service indicators are available, as are live Treasury municipal financial facts, Treasury capital-acquisition categories and NASA POWER representative-point climate normals. The IEC seat counts are a historical 2021 snapshot and are not current officeholder or coalition data; current 2026 reports are linked from the official IEC portal but are not bundled. Named municipal project registers, status, contractor and geolocation data are not included. Documents are linked from official sites and the Treasury audit-report catalogue; IDPs, budgets and annual reports are not individually crawled or asserted where no direct source URL was returned. CivicScore is not calculated. An authenticated manual-import API and PostgreSQL schema are now present, but the Neon connection has not yet been added to Render; there is no administrator UI or scheduled import worker.
 
 ## Live source integrations
 
@@ -127,13 +127,39 @@ The additional [`electricity-lighting-muni.csv`](frontend/assets/data/electricit
 - `GET /api/geographies/:level/:boundaryId/climate` — NASA POWER monthly temperature and precipitation climatology at a representative point in an ADM1, ADM2 or ADM3 boundary.
 - `GET /api/economy/national` — World Bank national GDP, real GDP growth and sector-value-added time series.
 - `GET /api/publications/sacn?limit=8` — South African Cities Network publications.
+- `GET /api/data/availability` — persisted dataset status; reports `not_configured` when `DATABASE_URL` is absent.
+- `GET /api/data/municipalities/:code/treasury?year=2024` — approved Treasury records only; unreviewed imports are not public.
+- `GET /api/admin/imports?limit=20` — authenticated import history.
+- `GET /api/admin/imports/:id?limit=50&offset=0` — authenticated import details, raw records and quality issues.
+- `POST /api/admin/imports/treasury` — authenticated manual import for one official Census municipality code and financial year.
+- `POST /api/admin/imports/:id/approve` — authenticated publication of a complete import with no unresolved quality issues.
+- `POST /api/admin/imports/:id/reject` — authenticated rejection of an unpublished import with a required reason.
 
-The API is intentionally read-only. Requests other than `GET` are rejected.
+Public data routes remain read-only. The only write routes are the two administrator endpoints above; both require a bearer token configured through `CIVICSTATS_ADMIN_TOKEN`. Other non-GET requests are rejected.
+
+## PostgreSQL persistence and manual Treasury imports
+
+A Neon project named `civicstats-sa` has been created in AWS Oregon on the Free plan. Neon Free is suitable for a prototype, not a production durability guarantee: current plan limits include 1 GB per project, compute scales to zero after inactivity, and scheduled backups are not included. The project is not connected to Render yet, and no data has been imported into it.
+
+To connect it without putting credentials in source control:
+
+1. In Neon, copy the pooled PostgreSQL connection string for `civicstats-sa` (with SSL enabled).
+2. In Render, open the `civicstats-sa` web service's **Environment** settings and add it as the secret environment variable `DATABASE_URL`. Do not paste the connection string into code, issues, or chat.
+3. Generate a random admin token of at least 32 bytes (for example, `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`) and set it as `CIVICSTATS_ADMIN_TOKEN` in the same Render settings. Never commit the token.
+4. The Node service runs versioned SQL migrations on startup when `DATABASE_URL` is configured. To apply them manually, set `DATABASE_URL` in the local process environment and run `npm run db:migrate`.
+5. Trigger a pilot import with `POST /api/admin/imports/treasury`, a bearer token, and JSON such as `{"municipalityCode":"LIM367","year":2024}`. Inspect it using `GET /api/admin/imports`; only complete imports without quality issues can be published with the approve endpoint.
+
+Imports retain the source payload, source/API URL, reporting year, source geography code, municipality crosswalk status, content hash and import history. Re-importing identical source content is idempotent; changed content is stored as a new version. Imports remain unpublished pending an authorized approval. A source publication date is not invented when Treasury does not provide one. Geography codes that do not exactly match the official Census code remain pending crosswalk review.
+
+This release provides a manual Treasury pilot, not recurring synchronization: no scheduler, worker service, administrator dashboard, multi-source importer, or live Neon storage test is configured yet. A successful mocked import test is not evidence that a production database import has completed.
 
 ## Structure
 
 ```text
 backend/server.js
+backend/data-store.js
+backend/migrate.js
+backend/migrations/001_data_platform.sql
 frontend/
   assets/geojson/
   assets/data/
@@ -147,4 +173,4 @@ Leaflet and IBM Plex Sans are loaded from their public CDNs; the map itself uses
 
 ## Before a public-data launch
 
-Add reviewed, period-aligned source datasets and their provenance before enabling additional thematic map layers, charts, rankings or CivicScore. A production service also needs a persistent database, authenticated and audited administration, validated imports, operational monitoring and deployment-specific security review. Those capabilities are outside this first runnable prototype.
+Add reviewed, period-aligned source datasets and their provenance before enabling additional thematic map layers, charts, rankings or CivicScore. This release's shared bearer-token administration has no named-user login or actor-level audit, and the website has no administrator dashboard. Manual review APIs cannot edit records or resolve geography crosswalks; they can approve clean imports or reject unpublished ones. A production rollout still needs a durable database plan and backups, scheduled worker and alerting, named administrator access, reviewed crosswalk management, multi-source connectors, and an end-to-end live database import test.

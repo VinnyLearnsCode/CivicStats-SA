@@ -1,9 +1,11 @@
 import { createReadStream } from "node:fs";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { isIP } from "node:net";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createDataStore, DataStoreError } from "./data-store.js";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const webRoot = resolve(root, "frontend");
@@ -519,6 +521,132 @@ function providerErrorMessage(error) {
   return error instanceof Error ? error.message : "The data provider request failed.";
 }
 
+function stableJson(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value ?? null);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  return `{${Object.entries(value)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+    .join(",")}}`;
+}
+
+function hashValue(value) {
+  return createHash("sha256").update(stableJson(value)).digest("hex");
+}
+
+class RequestBodyError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.name = "RequestBodyError";
+    this.status = status;
+  }
+}
+
+async function readJsonBody(request, maximumBytes = 8192) {
+  const contentType = request.headers["content-type"]?.split(";")[0].trim().toLocaleLowerCase();
+  if (contentType !== "application/json") {
+    throw new RequestBodyError("Content-Type must be application/json.", 415);
+  }
+  const declaredBytes = Number(request.headers["content-length"]);
+  if (Number.isFinite(declaredBytes) && declaredBytes > maximumBytes) {
+    throw new RequestBodyError("Request body is too large.", 413);
+  }
+  const chunks = [];
+  let bytes = 0;
+  let tooLarge = false;
+  for await (const chunk of request) {
+    bytes += chunk.length;
+    if (bytes > maximumBytes) {
+      tooLarge = true;
+      chunks.length = 0;
+      continue;
+    }
+    if (!tooLarge) chunks.push(chunk);
+  }
+  if (tooLarge) throw new RequestBodyError("Request body is too large.", 413);
+  let value;
+  try {
+    value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    throw new RequestBodyError("Request body must contain valid JSON.");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new RequestBodyError("Request body must be a JSON object.");
+  }
+  return value;
+}
+
+function isAuthorizedAdmin(request, adminToken) {
+  const authorization = request.headers.authorization;
+  if (!adminToken || typeof authorization !== "string" || !authorization.startsWith("Bearer ")) {
+    return false;
+  }
+  const supplied = Buffer.from(authorization.slice("Bearer ".length));
+  const expected = Buffer.from(adminToken);
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+function requireAdmin(request, response, adminToken, adminRequests) {
+  if (!adminToken) {
+    jsonResponse(response, 503, {
+      error: "Administrative access is not configured.",
+      code: "ADMIN_NOT_CONFIGURED"
+    });
+    return false;
+  }
+  const now = Date.now();
+  const address = request.socket.remoteAddress ?? "unknown";
+  const previous = adminRequests.get(address);
+  if (!previous || now - previous.startedAt >= 15 * 60 * 1000) {
+    if (adminRequests.size >= 1000) {
+      for (const [key, requestWindow] of adminRequests) {
+        if (now - requestWindow.startedAt >= 15 * 60 * 1000) adminRequests.delete(key);
+      }
+      if (adminRequests.size >= 1000) adminRequests.delete(adminRequests.keys().next().value);
+    }
+    adminRequests.set(address, { startedAt: now, count: 1 });
+  } else if (previous.count >= 60) {
+    response.setHeader("retry-after", "900");
+    jsonResponse(response, 429, {
+      error: "Too many administrative requests. Try again later.",
+      code: "ADMIN_RATE_LIMITED"
+    });
+    return false;
+  } else {
+    previous.count += 1;
+  }
+  if (!isAuthorizedAdmin(request, adminToken)) {
+    response.setHeader("www-authenticate", "Bearer");
+    jsonResponse(response, 401, {
+      error: "Administrator authentication is required.",
+      code: "ADMIN_AUTH_REQUIRED"
+    });
+    return false;
+  }
+  return true;
+}
+
+function treasuryImportMetadata(municipality, year) {
+  return {
+    sourceId: "national-treasury",
+    sourceName: "National Treasury · Municipal Money",
+    sourceUrl: "https://municipaldata.treasury.gov.za/",
+    datasetId: "national-treasury-municipal-finance",
+    datasetTitle: "Municipal finance facts",
+    datasetUrl: "https://municipaldata.treasury.gov.za/docs",
+    municipalityCode: municipality.officialCode,
+    municipalityName: municipality.name,
+    provinceName: municipality.province,
+    sourceCode: municipality.officialCode,
+    reportingPeriod: String(year),
+    unit: "ZAR",
+    updateFrequency: "Check weekly; import only when source data changes",
+    apiUrl: null,
+    records: [],
+    issues: []
+  };
+}
+
 function createProviderClient(fetchImpl) {
   const cache = new Map();
 
@@ -790,6 +918,121 @@ async function loadTreasuryFacts(providerClient, municipality, year) {
     supplemental,
     checkedAt: new Date().toISOString()
   };
+}
+
+function buildTreasuryImport(municipality, year, facts) {
+  const input = treasuryImportMetadata(municipality, year);
+  input.sourceCode = facts.treasuryMunicipality?.code ?? "unmatched";
+  input.apiUrl = facts.sourceUrl ?? null;
+  const groups = [
+    ["income_expenditure", { rows: facts.rows, sourceUrl: facts.sourceUrl }],
+    ...Object.entries(facts.supplemental ?? {})
+  ];
+
+  if (!facts.treasuryMunicipality) {
+    input.issues.push({
+      severity: "error",
+      code: "TREASURY_MUNICIPALITY_NOT_MATCHED",
+      message: "No Treasury municipality matched the selected municipality and province."
+    });
+  }
+  if (facts.year !== year) {
+    input.issues.push({
+      severity: "error",
+      code: "REPORTING_PERIOD_MISMATCH",
+      message: "Treasury returned a different financial reporting year."
+    });
+  }
+
+  let sourceRows = 0;
+  const seenRecords = new Set();
+  for (const [category, section] of groups) {
+    if (section?.error) {
+      input.issues.push({
+        severity: "warning",
+        code: "SOURCE_SECTION_UNAVAILABLE",
+        message: `${category}: ${section.error}`
+      });
+      continue;
+    }
+    if (!Array.isArray(section?.rows)) {
+      input.issues.push({
+        severity: "error",
+        code: "INVALID_SOURCE_SECTION",
+        message: `${category} did not contain a valid records collection.`
+      });
+      continue;
+    }
+    sourceRows += section.rows.length;
+    section.rows.forEach((sourceRecord, index) => {
+      if (!sourceRecord || typeof sourceRecord !== "object" || Array.isArray(sourceRecord)) {
+        input.issues.push({
+          severity: "error",
+          code: "INVALID_SOURCE_RECORD",
+          message: `${category} contains a record that is not an object.`
+        });
+        return;
+      }
+      const sourceCode = sourceRecord["demarcation.code"];
+      if (sourceCode != null && sourceCode !== input.sourceCode) {
+        input.issues.push({
+          severity: "error",
+          code: "RECORD_GEOGRAPHY_MISMATCH",
+          message: `${category} contains a record for a different Treasury municipality.`
+        });
+        return;
+      }
+      const recordYear = sourceRecord["financial_year_end.year"];
+      if (recordYear != null && recordYear !== year) {
+        input.issues.push({
+          severity: "error",
+          code: "RECORD_PERIOD_MISMATCH",
+          message: `${category} contains a record for a different financial year.`
+        });
+        return;
+      }
+      const amount = sourceRecord["amount.sum"] ?? sourceRecord.amount;
+      if (amount != null && (typeof amount !== "number" || !Number.isFinite(amount))) {
+        input.issues.push({
+          severity: "error",
+          code: "INVALID_NUMERIC_VALUE",
+          message: `${category} contains a non-numeric amount.`
+        });
+        return;
+      }
+      const dimensions = Object.fromEntries(
+        Object.entries(sourceRecord)
+          .filter(([key]) => key !== "amount.sum" && key !== "amount")
+          .sort(([left], [right]) => left.localeCompare(right))
+      );
+      const recordHash = hashValue({ category, sourceRecord });
+      if (seenRecords.has(recordHash)) {
+        input.issues.push({
+          severity: "error",
+          code: "DUPLICATE_SOURCE_RECORD",
+          message: `${category} contains a duplicate source record.`
+        });
+        return;
+      }
+      seenRecords.add(recordHash);
+      const recordKey = Object.keys(dimensions).length > 0
+        ? `${category}:${hashValue(dimensions)}`
+        : `${category}:${index}`;
+      input.records.push({
+        recordKey,
+        sourceUrl: section.sourceUrl ?? facts.sourceUrl ?? input.datasetUrl,
+        sourceRecord: { category, ...sourceRecord }
+      });
+    });
+  }
+  if (sourceRows === 0 && input.issues.length === 0) {
+    input.issues.push({
+      severity: "error",
+      code: "NO_SOURCE_RECORDS",
+      message: "Treasury returned no records for the selected municipality and year."
+    });
+  }
+  return input;
 }
 
 async function loadNasaPowerClimatology(providerClient, feature) {
@@ -1120,7 +1363,15 @@ function sendStaticFile(response, pathname) {
     .pipe(response);
 }
 
-export async function createAppServer({ fetchImpl = globalThis.fetch } = {}) {
+export async function createAppServer({
+  fetchImpl = globalThis.fetch,
+  dataStore = createDataStore(),
+  adminToken = process.env.CIVICSTATS_ADMIN_TOKEN
+} = {}) {
+  if (adminToken != null &&
+    (typeof adminToken !== "string" || Buffer.byteLength(adminToken) < 32)) {
+    throw new Error("CIVICSTATS_ADMIN_TOKEN must be at least 32 bytes.");
+  }
   const boundaries = await loadBoundaries();
   const sources = JSON.parse(await readFile(resolve(webRoot, "assets", "data-sources.json"), "utf8"));
   const providerClient = createProviderClient(fetchImpl);
@@ -1146,6 +1397,7 @@ export async function createAppServer({ fetchImpl = globalThis.fetch } = {}) {
       safeGeography(feature, boundaries, municipalities, metropolitanNames)
     )
   );
+  const adminRequests = new Map();
 
   return createServer((request, response) => {
     configureLocalCors(request, response);
@@ -1171,9 +1423,153 @@ export async function createAppServer({ fetchImpl = globalThis.fetch } = {}) {
       return;
     }
 
+    const treasuryImportPath = url.pathname === "/api/admin/imports/treasury";
+    const approveImportMatch = url.pathname.match(/^\/api\/admin\/imports\/(\d+)\/approve$/);
+    const rejectImportMatch = url.pathname.match(/^\/api\/admin\/imports\/(\d+)\/reject$/);
+    if (request.method === "POST" &&
+      (treasuryImportPath || approveImportMatch || rejectImportMatch)) {
+      if (!requireAdmin(request, response, adminToken, adminRequests)) return;
+      if (!dataStore) {
+        jsonResponse(response, 503, {
+          error: "Persistent data storage is not configured.",
+          code: "DATA_STORE_NOT_CONFIGURED"
+        });
+        return;
+      }
+
+      if (approveImportMatch) {
+        const importId = Number(approveImportMatch[1]);
+        void dataStore.approveImport(importId).then((result) => {
+          jsonResponse(response, 200, result);
+        }).catch((error) => {
+          if (error instanceof DataStoreError) {
+            jsonResponse(response, error.status, { error: error.message, code: error.code });
+            return;
+          }
+          console.error("Data import approval failed.", providerErrorMessage(error));
+          jsonResponse(response, 500, {
+            error: "The import could not be approved.",
+            code: "IMPORT_APPROVAL_FAILED"
+          });
+        });
+        return;
+      }
+
+      if (rejectImportMatch) {
+        void (async () => {
+          let body;
+          try {
+            body = await readJsonBody(request);
+          } catch (error) {
+            const status = error instanceof RequestBodyError ? error.status : 400;
+            jsonResponse(response, status, {
+              error: error instanceof RequestBodyError ? error.message : "Invalid request body.",
+              code: "INVALID_REQUEST_BODY"
+            });
+            return;
+          }
+          try {
+            const result = await dataStore.rejectImport(
+              Number(rejectImportMatch[1]),
+              typeof body.reason === "string" ? body.reason : ""
+            );
+            jsonResponse(response, 200, result);
+          } catch (error) {
+            if (error instanceof DataStoreError) {
+              jsonResponse(response, error.status, { error: error.message, code: error.code });
+              return;
+            }
+            console.error("Data import rejection failed.", providerErrorMessage(error));
+            jsonResponse(response, 500, {
+              error: "The import could not be rejected.",
+              code: "IMPORT_REJECTION_FAILED"
+            });
+          }
+        })();
+        return;
+      }
+
+      void (async () => {
+        let body;
+        try {
+          body = await readJsonBody(request);
+        } catch (error) {
+          const status = error instanceof RequestBodyError ? error.status : 400;
+          jsonResponse(response, status, {
+            error: error instanceof RequestBodyError ? error.message : "Invalid request body.",
+            code: "INVALID_REQUEST_BODY"
+          });
+          return;
+        }
+        const municipalityCode = typeof body.municipalityCode === "string"
+          ? body.municipalityCode.trim()
+          : "";
+        const municipality = municipalities.find((item) =>
+          item.level === "ADM3" && item.officialCode === municipalityCode
+        );
+        if (!municipality) {
+          jsonResponse(response, 400, {
+            error: "municipalityCode must match an official Census municipality code.",
+            code: "INVALID_MUNICIPALITY_CODE"
+          });
+          return;
+        }
+        const year = body.year;
+        if (!Number.isInteger(year) || year < 2019 || year > new Date().getUTCFullYear()) {
+          jsonResponse(response, 400, {
+            error: "Financial reporting year must be from 2019 through the current year.",
+            code: "INVALID_REPORTING_PERIOD"
+          });
+          return;
+        }
+
+        let facts;
+        try {
+          facts = await loadTreasuryFacts(providerClient, municipality, year);
+        } catch (error) {
+          try {
+            await dataStore.logFailedImport(
+              treasuryImportMetadata(municipality, year),
+              providerErrorMessage(error)
+            );
+          } catch (loggingError) {
+            console.error("Treasury import and failure logging both failed.", providerErrorMessage(loggingError));
+            jsonResponse(response, 500, {
+              error: "The Treasury import failed and its failure could not be logged.",
+              code: "IMPORT_LOG_FAILED"
+            });
+            return;
+          }
+          console.error("Treasury data import failed.", providerErrorMessage(error));
+          jsonResponse(response, 502, {
+            error: "National Treasury could not provide the requested import.",
+            code: "PROVIDER_UNAVAILABLE"
+          });
+          return;
+        }
+
+        try {
+          const result = await dataStore.persistImport(buildTreasuryImport(municipality, year, facts));
+          const status = result.duplicate
+            ? 200
+            : result.status === "awaiting_review"
+              ? 201
+              : 422;
+          jsonResponse(response, status, result);
+        } catch (error) {
+          console.error("Treasury import could not be stored.", providerErrorMessage(error));
+          jsonResponse(response, 500, {
+            error: "The Treasury import could not be stored.",
+            code: "IMPORT_STORAGE_FAILED"
+          });
+        }
+      })();
+      return;
+    }
+
     if (request.method !== "GET") {
       response.setHeader("allow", "GET");
-      jsonResponse(response, 405, { error: "Only GET requests are supported." });
+      jsonResponse(response, 405, { error: "This method is not supported." });
       return;
     }
 
@@ -1193,6 +1589,151 @@ export async function createAppServer({ fetchImpl = globalThis.fetch } = {}) {
 
     if (url.pathname === "/api/sources") {
       jsonResponse(response, 200, { sources });
+      return;
+    }
+
+    if (url.pathname === "/api/data/availability") {
+      if (!dataStore) {
+        jsonResponse(response, 200, { storage: "not_configured", datasets: [] });
+        return;
+      }
+      void dataStore.getAvailability().then((result) => {
+        jsonResponse(response, 200, result);
+      }).catch((error) => {
+        console.error("Data availability lookup failed.", providerErrorMessage(error));
+        jsonResponse(response, 503, {
+          error: "Persistent data storage is unavailable.",
+          code: "DATA_STORE_UNAVAILABLE"
+        });
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/admin/imports") {
+      if (!requireAdmin(request, response, adminToken, adminRequests)) return;
+      if (!dataStore) {
+        jsonResponse(response, 503, {
+          error: "Persistent data storage is not configured.",
+          code: "DATA_STORE_NOT_CONFIGURED"
+        });
+        return;
+      }
+      const limit = Number(url.searchParams.get("limit") ?? "20");
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        jsonResponse(response, 400, {
+          error: "limit must be an integer from 1 through 100.",
+          code: "INVALID_LIMIT"
+        });
+        return;
+      }
+      void dataStore.listImports(limit).then((imports) => {
+        jsonResponse(response, 200, { imports });
+      }).catch((error) => {
+        console.error("Import history lookup failed.", providerErrorMessage(error));
+        jsonResponse(response, 503, {
+          error: "Import history is unavailable.",
+          code: "IMPORT_HISTORY_UNAVAILABLE"
+        });
+      });
+      return;
+    }
+
+    const importDetailMatch = url.pathname.match(/^\/api\/admin\/imports\/(\d+)$/);
+    if (importDetailMatch) {
+      if (!requireAdmin(request, response, adminToken, adminRequests)) return;
+      if (!dataStore) {
+        jsonResponse(response, 503, {
+          error: "Persistent data storage is not configured.",
+          code: "DATA_STORE_NOT_CONFIGURED"
+        });
+        return;
+      }
+      const limit = Number(url.searchParams.get("limit") ?? "50");
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100 ||
+        !Number.isSafeInteger(offset) || offset < 0) {
+        jsonResponse(response, 400, {
+          error: "limit must be 1 through 100 and offset must be a non-negative integer.",
+          code: "INVALID_PAGINATION"
+        });
+        return;
+      }
+      void dataStore.getImport(Number(importDetailMatch[1]), { limit, offset }).then((result) => {
+        jsonResponse(response, 200, result);
+      }).catch((error) => {
+        if (error instanceof DataStoreError) {
+          jsonResponse(response, error.status, { error: error.message, code: error.code });
+          return;
+        }
+        console.error("Import detail lookup failed.", providerErrorMessage(error));
+        jsonResponse(response, 503, {
+          error: "Import details are unavailable.",
+          code: "IMPORT_DETAIL_UNAVAILABLE"
+        });
+      });
+      return;
+    }
+
+    if (url.pathname.startsWith("/api/admin/")) {
+      jsonResponse(response, 404, { error: "Unknown administrative endpoint." });
+      return;
+    }
+
+    const treasuryDataMatch = url.pathname.match(/^\/api\/data\/municipalities\/([^/]+)\/treasury$/);
+    if (treasuryDataMatch) {
+      let code;
+      try {
+        code = decodeURIComponent(treasuryDataMatch[1]);
+      } catch {
+        jsonResponse(response, 400, { error: "Invalid municipality code." });
+        return;
+      }
+      const municipality = municipalities.find((item) =>
+        item.level === "ADM3" && item.officialCode === code
+      );
+      if (!municipality) {
+        jsonResponse(response, 404, { error: "Municipality not found." });
+        return;
+      }
+      const year = Number(url.searchParams.get("year") ?? "2024");
+      if (!Number.isInteger(year) || year < 2019 || year > new Date().getUTCFullYear()) {
+        jsonResponse(response, 400, {
+          error: "Financial reporting year must be from 2019 through the current year."
+        });
+        return;
+      }
+      if (!dataStore) {
+        jsonResponse(response, 503, {
+          error: "Persistent data storage is not configured.",
+          code: "DATA_STORE_NOT_CONFIGURED"
+        });
+        return;
+      }
+      void dataStore.getTreasuryRecords(code, String(year)).then((result) => {
+        const validationStatus = result.latestImport
+          ? result.latestImport.status === "approved"
+            ? "verified"
+            : result.latestImport.status === "awaiting_review"
+              ? "awaiting_validation"
+              : "incomplete"
+          : result.dataset?.validation_status ?? "not_imported";
+        jsonResponse(response, 200, {
+          municipality,
+          reportingPeriod: String(year),
+          available: result.records.length > 0,
+          validationStatus,
+          publicationStatus: result.records.length > 0 ? "published" : "unpublished",
+          latestImport: result.latestImport,
+          source: result.dataset,
+          records: result.records
+        });
+      }).catch((error) => {
+        console.error("Published Treasury data lookup failed.", providerErrorMessage(error));
+        jsonResponse(response, 503, {
+          error: "Published Treasury data is unavailable.",
+          code: "DATA_LOOKUP_FAILED"
+        });
+      });
       return;
     }
 
@@ -1733,7 +2274,28 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("PORT must be a valid TCP port.");
   }
-  const server = await createAppServer();
+  const dataStore = createDataStore();
+  let server;
+  try {
+    if (dataStore) await dataStore.migrate();
+    server = await createAppServer({ dataStore });
+  } catch (error) {
+    if (dataStore) {
+      try {
+        await dataStore.close();
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], "Server startup and database cleanup both failed.");
+      }
+    }
+    throw error;
+  }
+  server.on("close", () => {
+    if (dataStore) {
+      void dataStore.close().catch((error) =>
+        console.error("Database connection pool could not be closed.", providerErrorMessage(error))
+      );
+    }
+  });
   const host = process.env.HOST ?? "127.0.0.1";
   server.listen(port, host, () => {
     console.log(`CivicStats SA ready on ${host}:${port}`);

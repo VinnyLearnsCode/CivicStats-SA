@@ -136,7 +136,7 @@ const viewCopy = {
   reports: ["Reports", "Public reports will appear here after verified documents are catalogued"],
   history: ["Historical data", "Historical comparisons require dated source datasets"],
   research: ["Research", "Research collections will appear when source material is catalogued"],
-  imports: ["Data imports", "Public data imports are not enabled in this read-only prototype"],
+  imports: ["Data imports", "Treasury manual imports are available through the authenticated API; the data-management dashboard is not built"],
   profile: ["User profile", "No account data is collected by this prototype"],
   settings: ["Settings", "Workspace settings are not available in this read-only prototype"]
 };

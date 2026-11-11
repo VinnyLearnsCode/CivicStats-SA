@@ -6,7 +6,7 @@ let server;
 let baseUrl;
 
 before(async () => {
-  server = await createAppServer();
+  server = await createAppServer({ dataStore: null, adminToken: null });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
@@ -533,6 +533,239 @@ test("live provider routes return source-linked finance, audit and publication r
   } finally {
     await new Promise((resolve, reject) =>
       providerServer.close((error) => error ? reject(error) : resolve())
+    );
+  }
+});
+
+test("data availability and administrative routes fail closed without configuration", async () => {
+  const serverWithoutStorage = await createAppServer({ dataStore: null, adminToken: null });
+  await new Promise((resolve) => serverWithoutStorage.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${serverWithoutStorage.address().port}`;
+  try {
+    const availability = await fetch(`${url}/api/data/availability`);
+    assert.equal(availability.status, 200);
+    assert.deepEqual(await availability.json(), { storage: "not_configured", datasets: [] });
+
+    const imports = await fetch(`${url}/api/admin/imports`);
+    assert.equal(imports.status, 503);
+    assert.equal((await imports.json()).code, "ADMIN_NOT_CONFIGURED");
+
+    const trigger = await fetch(`${url}/api/admin/imports/treasury`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ municipalityCode: "LIM367", year: 2024 })
+    });
+    assert.equal(trigger.status, 503);
+    assert.equal((await trigger.json()).code, "ADMIN_NOT_CONFIGURED");
+  } finally {
+    await new Promise((resolve, reject) =>
+      serverWithoutStorage.close((error) => error ? reject(error) : resolve())
+    );
+  }
+});
+
+test("administrative endpoints rate limit repeated attempts", async () => {
+  const adminToken = "civicstats-test-admin-token-0123456789";
+  const rateLimitServer = await createAppServer({ dataStore: null, adminToken });
+  await new Promise((resolve) => rateLimitServer.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${rateLimitServer.address().port}`;
+  try {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const response = await fetch(`${url}/api/admin/imports`);
+      assert.equal(response.status, 401);
+    }
+    const limited = await fetch(`${url}/api/admin/imports`, {
+      headers: { authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(limited.status, 429);
+    assert.equal(limited.headers.get("retry-after"), "900");
+    assert.equal((await limited.json()).code, "ADMIN_RATE_LIMITED");
+  } finally {
+    await new Promise((resolve, reject) =>
+      rateLimitServer.close((error) => error ? reject(error) : resolve())
+    );
+  }
+});
+
+test("Treasury imports validate source records and leave them awaiting administrator review", async () => {
+  const adminToken = "civicstats-test-admin-token-0123456789";
+  const treasuryMunicipality = {
+    "municipality.demarcation_code": "LIM367",
+    "municipality.name": "Mogalakwena",
+    "municipality.province_name": "Limpopo"
+  };
+  const treasuryRow = {
+    "demarcation.code": "LIM367",
+    "demarcation.label": "Mogalakwena",
+    "financial_year_end.year": 2024,
+    "item.code": "1600",
+    "item.label": "Operational Revenue",
+    "amount.sum": 123456
+  };
+  let persistedInput;
+  let approvalId;
+  const dataStore = {
+    async persistImport(input) {
+      persistedInput = input;
+      return {
+        import_id: 17,
+        status: "awaiting_review",
+        records_retrieved: input.records.length,
+        records_accepted: input.records.length,
+        records_rejected: 0,
+        duplicate: false
+      };
+    },
+    async logFailedImport() {},
+    async listImports(limit) {
+      assert.equal(limit, 5);
+      return [{ import_id: 17, status: "awaiting_review" }];
+    },
+    async getImport(importId, options) {
+      assert.equal(importId, 17);
+      assert.deepEqual(options, { limit: 10, offset: 0 });
+      return {
+        import: { import_id: importId, status: "awaiting_review" },
+        records: [{ raw_record_id: 1 }],
+        recordCount: 1,
+        qualityIssues: [],
+        qualityIssueCount: 0
+      };
+    },
+    async approveImport(importId) {
+      approvalId = importId;
+      return { import_id: importId, status: "approved" };
+    },
+    async rejectImport(importId, reason) {
+      assert.equal(importId, 18);
+      assert.equal(reason, "Source records did not pass review.");
+      return { import_id: importId, status: "rejected", duplicate: false };
+    }
+  };
+  const fakeFetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.endsWith("/members/municipality")) {
+      return Response.json({ status: "ok", data: [treasuryMunicipality] });
+    }
+    if (url.pathname.endsWith("/aggregate")) {
+      return Response.json({ status: "ok", total_cell_count: 1, cells: [treasuryRow] });
+    }
+    if (url.pathname.endsWith("/uifwexp/facts")) {
+      return Response.json({
+        status: "ok",
+        total_fact_count: 1,
+        data: [{
+          "demarcation.code": "LIM367",
+          "financial_year_end.year": 2024,
+          "item.label": "Irregular expenditure",
+          amount: 3000
+        }]
+      });
+    }
+    throw new Error(`Unexpected provider URL: ${url}`);
+  };
+  const importServer = await createAppServer({ fetchImpl: fakeFetch, dataStore, adminToken });
+  await new Promise((resolve) => importServer.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${importServer.address().port}`;
+  try {
+    const unauthorized = await fetch(`${url}/api/admin/imports/treasury`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer wrong-token" },
+      body: JSON.stringify({ municipalityCode: "LIM367", year: 2024 })
+    });
+    assert.equal(unauthorized.status, 401);
+    assert.equal(persistedInput, undefined);
+
+    const trigger = await fetch(`${url}/api/admin/imports/treasury`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ municipalityCode: "LIM367", year: 2024 })
+    });
+    assert.equal(trigger.status, 201);
+    assert.equal((await trigger.json()).status, "awaiting_review");
+    assert.equal(persistedInput.datasetId, "national-treasury-municipal-finance");
+    assert.equal(persistedInput.municipalityCode, "LIM367");
+    assert.equal(persistedInput.sourceCode, "LIM367");
+    assert.equal(persistedInput.reportingPeriod, "2024");
+    assert.equal(persistedInput.unit, "ZAR");
+    assert.equal(persistedInput.records.length, 6);
+    assert.deepEqual(persistedInput.issues, []);
+    assert.ok(persistedInput.records.every((record) => record.sourceUrl.startsWith("https://")));
+
+    const imports = await fetch(`${url}/api/admin/imports?limit=5`, {
+      headers: { authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(imports.status, 200);
+    assert.equal((await imports.json()).imports[0].import_id, 17);
+
+    const detail = await fetch(`${url}/api/admin/imports/17?limit=10&offset=0`, {
+      headers: { authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json()).recordCount, 1);
+
+    const approval = await fetch(`${url}/api/admin/imports/17/approve`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${adminToken}` }
+    });
+    assert.equal(approval.status, 200);
+    assert.equal((await approval.json()).status, "approved");
+    assert.equal(approvalId, 17);
+
+    const rejection = await fetch(`${url}/api/admin/imports/18/reject`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ reason: "Source records did not pass review." })
+    });
+    assert.equal(rejection.status, 200);
+    assert.equal((await rejection.json()).status, "rejected");
+  } finally {
+    await new Promise((resolve, reject) =>
+      importServer.close((error) => error ? reject(error) : resolve())
+    );
+  }
+});
+
+test("central Treasury API exposes only published records from the data store", async () => {
+  const dataStore = {
+    async getTreasuryRecords(municipalityCode, reportingPeriod) {
+      assert.equal(municipalityCode, "LIM367");
+      assert.equal(reportingPeriod, "2024");
+      return {
+        dataset: {
+          validation_status: "verified",
+          publication_status: "published",
+          source_url: "https://municipaldata.treasury.gov.za/docs"
+        },
+        latestImport: { status: "approved" },
+        records: [{
+          record_id: 3,
+          source_record: { category: "income_expenditure", "amount.sum": 123456 },
+          source_url: "https://municipaldata.treasury.gov.za/api/cubes/incexp_v2"
+        }]
+      };
+    }
+  };
+  const dataServer = await createAppServer({ dataStore, adminToken: null });
+  await new Promise((resolve) => dataServer.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${dataServer.address().port}`;
+  try {
+    const response = await fetch(`${url}/api/data/municipalities/LIM367/treasury?year=2024`);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.available, true);
+    assert.equal(result.validationStatus, "verified");
+    assert.equal(result.publicationStatus, "published");
+    assert.equal(result.records[0].source_record["amount.sum"], 123456);
+  } finally {
+    await new Promise((resolve, reject) =>
+      dataServer.close((error) => error ? reject(error) : resolve())
     );
   }
 });
