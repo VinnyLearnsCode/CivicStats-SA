@@ -2726,16 +2726,35 @@ function renderNamedProjectRecords(parent, result) {
   const section = appendCensusSection(parent,
     `${result.municipality.name} · named infrastructure projects`,
     `Municipal Money source records for FY ${result.financialYear}. The source provides selected years from FY 2017/2018 through FY 2023/2024; FY 2018/2019 is absent from its published catalogue. Project type is not a completion status.`);
+  const searchLabel = document.createElement("label");
+  searchLabel.className = "project-search-label";
+  searchLabel.textContent = "SEARCH PROJECTS";
+  const search = document.createElement("input");
+  search.type = "search";
+  search.className = "project-search-input";
+  search.placeholder = "Name, project number, ward, type or budget phase";
+  search.setAttribute("aria-label", "Search named projects by name, project number, ward, type or budget phase");
+  searchLabel.append(search);
+  section.append(searchLabel);
   const note = document.createElement("p");
   note.className = "finance-source-note";
   let displayed = 0;
-  note.textContent = `Showing ${Math.min(50, result.projects.length).toLocaleString("en-ZA")} of ${Number(result.totalRecords).toLocaleString("en-ZA")} source records${result.truncated ? ` (source retrieval capped at ${result.projects.length.toLocaleString("en-ZA")})` : ""}. Checked ${new Date(result.checkedAt).toLocaleString("en-ZA")}.`;
+  const list = document.createElement("div");
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "section-tab";
+  more.textContent = "Load next 50 projects";
+  let filteredProjects = result.projects;
+  const updateNote = () => {
+    const allCount = Number(result.totalRecords).toLocaleString("en-ZA");
+    note.textContent = `Showing ${displayed.toLocaleString("en-ZA")} of ${filteredProjects.length.toLocaleString("en-ZA")} matching projects (${allCount} source records)${result.truncated ? `; source retrieval capped at ${result.projects.length.toLocaleString("en-ZA")}` : ""}. Source checked ${new Date(result.checkedAt).toLocaleString("en-ZA")}.`;
+  };
   section.append(note);
   if (!result.projects.length) {
     addDetailMessage(section, "No records returned", "The source returned no named-project records for this municipality and reporting year. This is not evidence that the municipality had no projects.");
   } else {
     const appendProjects = (to) => {
-      result.projects.slice(displayed, to).forEach((project) => {
+      filteredProjects.slice(displayed, to).forEach((project) => {
         const article = document.createElement("article");
         article.className = "audit-opinion document-record";
         const title = document.createElement("strong");
@@ -2751,23 +2770,27 @@ function renderNamedProjectRecords(parent, result) {
           amount.textContent = `${item.financialYear || result.financialYear} · ${item.budgetPhase}: R ${item.amount.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}`;
           article.append(amount);
         });
-        section.append(article);
+        list.append(article);
       });
       displayed = to;
+      updateNote();
+      more.hidden = displayed >= filteredProjects.length;
     };
-    appendProjects(Math.min(50, result.projects.length));
-    if (displayed < result.projects.length) {
-      const more = document.createElement("button");
-      more.type = "button";
-      more.className = "section-tab";
-      more.textContent = "Load next 50 projects";
-      more.addEventListener("click", () => {
-        appendProjects(Math.min(displayed + 50, result.projects.length));
-        note.textContent = `Showing ${displayed.toLocaleString("en-ZA")} of ${Number(result.totalRecords).toLocaleString("en-ZA")} source records${result.truncated ? ` (source retrieval capped at ${result.projects.length.toLocaleString("en-ZA")})` : ""}. Checked ${new Date(result.checkedAt).toLocaleString("en-ZA")}.`;
-        if (displayed >= result.projects.length) more.remove();
+    more.addEventListener("click", () => appendProjects(Math.min(displayed + 50, filteredProjects.length)));
+    search.addEventListener("input", () => {
+      const query = search.value.trim().toLocaleLowerCase();
+      filteredProjects = result.projects.filter((project) => {
+        const fields = [project.name, project.projectNumber, project.type, project.function, project.ward,
+          ...project.expenditure.flatMap((entry) => [entry.financialYear, entry.budgetPhase])];
+        return fields.some((value) => String(value ?? "").toLocaleLowerCase().includes(query));
       });
-      section.append(more);
-    }
+      displayed = 0;
+      list.replaceChildren();
+      appendProjects(Math.min(50, filteredProjects.length));
+      if (!filteredProjects.length) addDetailMessage(list, "No matching projects", "Try a different project name, number, ward, type or budget phase.");
+    });
+    section.append(list, more);
+    appendProjects(Math.min(50, filteredProjects.length));
   }
   addSourceLink(section, result.source.url, "Open source municipal project register ↗");
 }
@@ -4100,7 +4123,8 @@ function renderSourceCards() {
       <a href="${escapeHtml(portalUrl)}" target="_blank" rel="noopener noreferrer">Visit official source ↗</a>
       ${source.dataUrl ? `<a href="${escapeHtml(source.dataUrl)}" target="_blank" rel="noopener noreferrer">Open original data ↗</a>` : ""}
       ${source.datasetUrl ? `<a href="${escapeHtml(source.datasetUrl)}" target="_blank" rel="noopener noreferrer">Open dataset extract ↗</a>` : ""}
-      ${source.apiUrl ? `<a href="${escapeHtml(source.apiUrl)}" target="_blank" rel="noopener noreferrer">Open API ↗</a>` : ""}</article>`;
+      ${source.apiUrl ? `<a href="${escapeHtml(source.apiUrl)}" target="_blank" rel="noopener noreferrer">Open API ↗</a>` : ""}
+      ${current?.checkedAt ? `<p class="source-checked-at">Status checked ${escapeHtml(new Date(current.checkedAt).toLocaleString("en-ZA"))}.</p>` : ""}</article>`;
     })()}`).join("")}</div>`;
 }
 
@@ -4186,7 +4210,7 @@ function renderComparison() {
       `<td data-census-indicator="${key}" data-index="${index}">—</td>`
     ).join("")}</tr>`
   ).join("");
-  return `<div class="compare-controls">${selectFields}<div class="view-actions"><button class="action-button" id="compare-export" disabled title="Export source-linked Census indicators for the selected municipalities">Export comparison data</button></div></div>
+  return `<div class="compare-controls">${selectFields}<div class="view-actions"><button class="action-button" id="compare-export" disabled title="Export source-linked Census indicators for the selected municipalities">Export comparison data</button><button class="action-button" id="compare-share" disabled title="Copy a link that opens this municipality comparison">Copy comparison link</button></div></div>
     <h3 class="comparison-subheading">Available geographic metadata</h3>
     <div class="data-table-wrap"><table class="data-table compare-table"><thead><tr><th>Property</th><th data-compare-heading="0">Geography 1</th><th data-compare-heading="1">Geography 2</th><th data-compare-heading="2">Geography 3</th></tr></thead><tbody>${metadataRows}</tbody></table></div>
     <h3 class="comparison-subheading">Census population &amp; households · 2011 and 2022</h3>
@@ -4244,9 +4268,12 @@ function initializeComparison() {
     selects[0].value = state.selected.id;
   }
   const exportButton = alternateView.querySelector("#compare-export");
+  const shareButton = alternateView.querySelector("#compare-share");
   const update = () => {
     const requestId = ++state.comparisonRequestId;
     const selectedIds = selects.map((select) => select.value).filter(Boolean);
+    state.comparisonSelections = selectedIds;
+    renderMapComparisonSelection();
     const pending = [];
     selects.forEach((select, index) => {
       const item = state.municipalities.find((municipality) => municipality.id === select.value);
@@ -4275,6 +4302,7 @@ function initializeComparison() {
     });
     updateComparisonIndicators(selects);
     if (exportButton) exportButton.disabled = selectedIds.length === 0;
+    if (shareButton) shareButton.disabled = selectedIds.length < 2;
     if (pending.length) {
       void Promise.all(pending).then(() => {
         if (requestId === state.comparisonRequestId && state.view === "comparisons") {
@@ -4285,7 +4313,23 @@ function initializeComparison() {
   };
   selects.forEach((select) => select.addEventListener("change", update));
   exportButton?.addEventListener("click", exportComparison);
+  shareButton?.addEventListener("click", copyComparisonLink);
   update();
+}
+
+async function copyComparisonLink() {
+  const ids = [...alternateView.querySelectorAll(".compare-select")].map((select) => select.value).filter(Boolean);
+  if (ids.length < 2) return;
+  const url = new URL(location.href);
+  url.search = "";
+  url.searchParams.set("compare", ids.join(","));
+  url.hash = "";
+  try {
+    await navigator.clipboard.writeText(url.href);
+    showToast("Comparison link copied. It opens with these municipalities selected.");
+  } catch {
+    showToast("Could not copy the link. Copy this address from your browser after selecting the municipalities.");
+  }
 }
 
 function comparisonValue(indicators, key, result) {
@@ -4798,10 +4842,17 @@ async function initialize() {
       `SOUTH AFRICA · ${health.boundaryLevels.ADM1} PROVINCES`;
     document.querySelector("#mobile-scrim").hidden = true;
     const params = new URLSearchParams(location.search);
+    const comparisonIds = [...new Set((params.get("compare") ?? "").split(",").filter(Boolean))]
+      .filter((id) => state.municipalities.some((item) => item.id === id))
+      .slice(0, 3);
     const requestedGeography = state.geographies.find((item) =>
       item.id === params.get("geography")
     );
-    if (requestedGeography) {
+    if (comparisonIds.length >= 2) {
+      state.comparisonSelections = comparisonIds;
+      renderMapComparisonSelection();
+      setView("comparisons");
+    } else if (requestedGeography) {
       await selectGeography(requestedGeography, { focus: false });
       const requestedTab = params.get("tab");
       if (requestedTab && tabContent[requestedTab]) setTab(requestedTab);

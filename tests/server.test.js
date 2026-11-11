@@ -380,6 +380,10 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(stylesheet.headers.get("content-type"), /text\/css/);
   assert.equal(application.status, 200);
   assert.match(application.headers.get("content-type"), /javascript/);
+  const applicationScript = await application.text();
+  assert.match(applicationScript, /project-search-input/);
+  assert.match(applicationScript, /compare-share/);
+  assert.match(applicationScript, /searchParams\.set\("compare"/);
   assert.equal(sourceCatalogue.status, 200);
   const sources = await sourceCatalogue.json();
   assert.ok(sources.some((source) => source.id === "geoboundaries"));
