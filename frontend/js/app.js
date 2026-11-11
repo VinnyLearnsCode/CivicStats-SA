@@ -22,6 +22,9 @@ const state = {
   nationalEconomyData: null,
   nationalEconomyError: null,
   nationalEconomyLoading: false,
+  nationalGdpHistory: null,
+  nationalGdpHistoryLoading: false,
+  nationalGdpHistoryError: null,
   labourData: null,
   labourLoadPromise: null,
   labourMapRecords: new Map(),
@@ -4745,39 +4748,179 @@ function renderNationalMetrics() {
   const latestUsdGdp = usdGdp?.values?.at(-1);
   const metrics = [
     {
-      label: `Nominal GDP · ${gdpDataset?.year ?? "Stats SA"}`,
+      label: "Nominal GDP",
+      period: gdpDataset?.year ?? "Year pending",
       value: gdpDataset?.national?.gdpCurrentPricesRandMillions != null
         ? `R${formatCensusNumber(gdpDataset.national.gdpCurrentPricesRandMillions / 1000, 1)} bn`
         : state.economyMapLoading ? "Loading…" : "Unavailable",
       note: "Current prices · Stats SA GDP-R"
     },
     {
-      label: `Real GDP growth · ${gdpDataset?.year ?? "Stats SA"}`,
+      label: "Real GDP growth",
+      period: gdpDataset?.year ?? "Year pending",
       value: Number.isFinite(gdpDataset?.national?.realGdpGrowthPercent)
         ? `${formatCensusNumber(gdpDataset.national.realGdpGrowthPercent, 1)}%`
         : state.economyMapLoading ? "Loading…" : "Unavailable",
       note: "Inflation-adjusted · Stats SA GDP-R"
     },
     {
-      label: `GDP · current US$ · ${latestUsdGdp?.year ?? "World Bank"}`,
+      label: "GDP · current US$",
+      period: latestUsdGdp?.year ?? "Year pending",
       value: Number.isFinite(latestUsdGdp?.value)
         ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(latestUsdGdp.value)
         : state.nationalEconomyLoading ? "Loading…" : "Unavailable",
       note: "Nominal · World Bank WDI"
     },
     {
-      label: "Population · Census 2022",
+      label: "Population",
+      period: 2022,
       value: Number.isFinite(nationalPopulation) ? formatCensusNumber(nationalPopulation) : "Loading…",
-      note: censusLoaded ? "Sum of municipal Census records" : "Statistics South Africa"
+      note: censusLoaded ? "Stats SA · sum of 213 municipal Census records" : "Statistics South Africa · Census"
     }
   ];
   container.innerHTML = metrics.map((metric) => `
     <article class="summary-card">
-      <div class="label">${escapeHtml(metric.label)}</div>
+      <div class="summary-card-heading"><span class="label">${escapeHtml(metric.label)}</span><span class="summary-period">${escapeHtml(metric.period)}</span></div>
       <strong>${escapeHtml(metric.value)}</strong>
-      <span>${escapeHtml(metric.note)}</span>
+      <span class="summary-source">${escapeHtml(metric.note)}</span>
     </article>
   `).join("");
+}
+
+function renderNationalGdpHistory() {
+  const container = document.querySelector("#national-trends");
+  if (!container) return;
+  container.replaceChildren();
+  const records = state.nationalGdpHistory;
+  if (!records?.length) {
+    const message = document.createElement("p");
+    message.className = "national-trend-state";
+    message.textContent = state.nationalGdpHistoryLoading
+      ? "Loading Stats SA national GDP history…"
+      : state.nationalGdpHistoryError
+        ? "National GDP history is temporarily unavailable."
+        : "Stats SA national GDP history will appear here.";
+    container.append(message);
+    return;
+  }
+
+  const charts = [
+    {
+      title: "Nominal GDP",
+      subtitle: "Current prices · R billion · not adjusted for inflation",
+      key: "gdpCurrentPricesRandBillions",
+      color: "#58c8c1",
+      format: (value) => `R${formatCensusNumber(value, 1)} bn`
+    },
+    {
+      title: "Real GDP growth",
+      subtitle: "Annual change · inflation-adjusted · percent",
+      key: "realGdpGrowthPercent",
+      color: "#a8bf77",
+      format: (value) => `${formatCensusNumber(value, 1)}%`
+    }
+  ];
+  charts.forEach((chartSpec) => {
+    const chartRecords = records.map((record) => ({
+      year: record.year,
+      value: record[chartSpec.key]
+    }));
+    const article = document.createElement("article");
+    article.className = "national-trend-card";
+    const heading = document.createElement("div");
+    heading.className = "national-trend-card-heading";
+    const title = document.createElement("h3");
+    title.textContent = chartSpec.title;
+    const range = document.createElement("span");
+    range.className = "summary-period";
+    range.textContent = `${chartRecords[0].year}–${chartRecords.at(-1).year}`;
+    heading.append(title, range);
+    const subtitle = document.createElement("p");
+    subtitle.textContent = chartSpec.subtitle;
+
+    const minimum = Math.min(...chartRecords.map((record) => record.value));
+    const maximum = Math.max(...chartRecords.map((record) => record.value));
+    const span = maximum - minimum || 1;
+    const points = chartRecords.map((record, index) => ({
+      ...record,
+      x: 8 + index * 304 / Math.max(1, chartRecords.length - 1),
+      y: 8 + (maximum - record.value) / span * 64
+    }));
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 320 94");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", `${chartSpec.title}, ${points.map((point) => `${point.year}: ${chartSpec.format(point.value)}`).join("; ")}`);
+    const baseline = document.createElementNS(svg.namespaceURI, "line");
+    baseline.setAttribute("x1", "8");
+    baseline.setAttribute("x2", "312");
+    baseline.setAttribute("y1", "78");
+    baseline.setAttribute("y2", "78");
+    baseline.setAttribute("class", "national-trend-baseline");
+    const path = document.createElementNS(svg.namespaceURI, "path");
+    path.setAttribute("d", points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" "));
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", chartSpec.color);
+    path.setAttribute("stroke-width", "2.5");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    const firstPoint = document.createElementNS(svg.namespaceURI, "circle");
+    firstPoint.setAttribute("cx", points[0].x.toFixed(1));
+    firstPoint.setAttribute("cy", points[0].y.toFixed(1));
+    firstPoint.setAttribute("r", "3");
+    firstPoint.setAttribute("fill", chartSpec.color);
+    const lastPoint = document.createElementNS(svg.namespaceURI, "circle");
+    lastPoint.setAttribute("cx", points.at(-1).x.toFixed(1));
+    lastPoint.setAttribute("cy", points.at(-1).y.toFixed(1));
+    lastPoint.setAttribute("r", "3.5");
+    lastPoint.setAttribute("fill", chartSpec.color);
+    svg.append(baseline, path, firstPoint, lastPoint);
+
+    const footer = document.createElement("div");
+    footer.className = "national-trend-footer";
+    const first = document.createElement("span");
+    first.textContent = `${points[0].year} · ${chartSpec.format(points[0].value)}`;
+    const last = document.createElement("strong");
+    last.textContent = `${points.at(-1).year} · ${chartSpec.format(points.at(-1).value)}`;
+    footer.append(first, last);
+    article.append(heading, subtitle, svg, footer);
+    container.append(article);
+  });
+}
+
+async function loadNationalGdpHistory() {
+  if (state.nationalGdpHistory || state.nationalGdpHistoryLoading) return;
+  state.nationalGdpHistoryLoading = true;
+  state.nationalGdpHistoryError = null;
+  renderNationalGdpHistory();
+  try {
+    const current = state.provincialEconomyData ?? await loadProvincialGdpData(state.economyMapYear);
+    const years = current?.availableYears;
+    if (!Array.isArray(years) || years.length < 2) {
+      throw new Error("Stats SA national GDP history years are unavailable.");
+    }
+    const datasets = await Promise.all(years.map((year) => getJson(`/api/economy/provinces?year=${year}`)));
+    const records = datasets.map((dataset) => ({
+      year: dataset.year,
+      gdpCurrentPricesRandBillions: dataset.national?.gdpCurrentPricesRandMillions / 1000,
+      realGdpGrowthPercent: dataset.national?.realGdpGrowthPercent
+    }));
+    const sourceValid = datasets.every((dataset, index) =>
+      dataset.year === years[index] &&
+      dataset.source?.publisher === "Statistics South Africa" &&
+      dataset.source?.reportNumber === "P0441.2" &&
+      dataset.source?.geographyLevel === "Province" &&
+      dataset.source?.url?.startsWith("https://") &&
+      Number.isFinite(dataset.national?.gdpCurrentPricesRandMillions) &&
+      Number.isFinite(dataset.national?.realGdpGrowthPercent)
+    );
+    if (!sourceValid) throw new Error("Stats SA GDP-R history was incomplete or failed source validation.");
+    state.nationalGdpHistory = records;
+  } catch (error) {
+    state.nationalGdpHistoryError = error.message;
+  } finally {
+    state.nationalGdpHistoryLoading = false;
+    renderNationalGdpHistory();
+  }
 }
 
 function loadNationalDashboardEconomy() {
@@ -5642,6 +5785,7 @@ async function initialize() {
   bindEvents();
   renderNationalHighlights();
   renderNationalMetrics();
+  renderNationalGdpHistory();
   renderDetail();
   updateNavigation();
   if (typeof L === "undefined") {
@@ -5694,7 +5838,10 @@ async function initialize() {
     void loadLiveSourceData();
     void loadCensusMapData(state.censusMapYear);
     void loadProvincialLabourData();
-    void loadProvincialGdpData(state.economyMapYear).then(() => renderNationalMetrics());
+    void loadProvincialGdpData(state.economyMapYear).then(() => {
+      renderNationalMetrics();
+      void loadNationalGdpHistory();
+    });
     loadNationalDashboardEconomy();
     renderNationalHighlights();
     renderNationalMetrics();
