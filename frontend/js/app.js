@@ -4071,11 +4071,10 @@ function bindEvents() {
     document.querySelector("#mobile-scrim").hidden = false;
   });
   document.querySelector("#mobile-profile-toggle").addEventListener("click", () => {
-    document.body.classList.toggle("mobile-profile-open");
-    document.querySelector("#mobile-scrim").hidden = !document.body.classList.contains("mobile-profile-open");
+    document.querySelector("#profile-panel").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   document.querySelector("#mobile-scrim").addEventListener("click", () => {
-    document.body.classList.remove("mobile-nav-open", "mobile-profile-open");
+    document.body.classList.remove("mobile-nav-open");
     document.querySelector("#mobile-scrim").hidden = true;
   });
   searchInput.addEventListener("input", () => renderSearchResults(searchInput.value));
