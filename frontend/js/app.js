@@ -137,9 +137,9 @@ const tabContent = {
     source: "Statistics South Africa · Census"
   },
   economy: {
-    kicker: "ECONOMY",
-    title: "Economic activity & employment",
-    description: "Stats SA provincial GDP-R and unemployment, alongside municipality-level Treasury financial flows. Provincial values are not downscaled to municipalities.",
+    kicker: "REGIONAL ECONOMY",
+    title: "Provincial economy & labour",
+    description: "Stats SA GDP-R and QLFS are province-level measures. Municipal Treasury accounts are shown as financial flows, not local GDP or employment estimates.",
     source: "Statistics South Africa · GDP-R / QLFS / National Treasury"
   },
   documents: {

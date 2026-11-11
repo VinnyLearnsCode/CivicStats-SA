@@ -29,49 +29,40 @@
             <section class="nav-group">
               <h2>Main</h2>
               <button class="nav-link active" data-view="dashboard"><span class="nav-icon">⌂</span>Dashboard</button>
-              <button class="nav-link" data-view="national"><span class="nav-icon">◎</span>National overview</button>
-              <button class="nav-link" data-view="workspace"><span class="nav-icon">▦</span>Workspace</button>
             </section>
             <section class="nav-group">
               <h2>Intelligence</h2>
               <button class="nav-link" data-view="municipalities"><span class="nav-icon">⌖</span>Municipalities</button>
               <button class="nav-link" data-tab="demographics"><span class="nav-icon">◷</span>Demographics</button>
               <button class="nav-link" data-tab="politics"><span class="nav-icon">⚖</span>Politics</button>
-              <button class="nav-link" data-tab="economy"><span class="nav-icon">⌁</span>Economy</button>
+              <button class="nav-link" data-tab="economy"><span class="nav-icon">⌁</span>Regional economy</button>
               <button class="nav-link" data-tab="climate"><span class="nav-icon">☼</span>Climate</button>
-              <button class="nav-link" data-tab="services"><span class="nav-icon">⊞</span>Service delivery</button>
             </section>
             <section class="nav-group">
               <h2>Infrastructure</h2>
               <button class="nav-link" data-tab="services"><span class="nav-icon">ϟ</span>Electricity</button>
               <button class="nav-link" data-tab="services"><span class="nav-icon">◌</span>Water &amp; sanitation</button>
-              <button class="nav-link" data-tab="services"><span class="nav-icon">↗</span>Roads &amp; transport</button>
-              <button class="nav-link" data-tab="services"><span class="nav-icon">▤</span>Public infrastructure</button>
               <button class="nav-link" data-tab="documents"><span class="nav-icon">⌑</span>Projects</button>
+              <button class="nav-link nav-link-planned" type="button" disabled aria-disabled="true" title="Municipal road indicators are not connected yet"><span class="nav-icon">↗</span>Roads &amp; transport <span class="nav-status">Planned</span></button>
+              <button class="nav-link nav-link-planned" type="button" disabled aria-disabled="true" title="A verified municipal infrastructure dataset is not available yet"><span class="nav-icon">▤</span>Public infrastructure <span class="nav-status">Planned</span></button>
             </section>
             <section class="nav-group">
               <h2>Analysis</h2>
               <button class="nav-link" data-view="comparisons"><span class="nav-icon">⇄</span>Comparisons</button>
-              <button class="nav-link" data-view="reports"><span class="nav-icon">▧</span>Reports</button>
-              <button class="nav-link" data-view="history"><span class="nav-icon">◴</span>Historical data</button>
-              <button class="nav-link" data-view="research"><span class="nav-icon">⌕</span>Research</button>
+              <button class="nav-link nav-link-planned" type="button" disabled aria-disabled="true" title="A verified reports catalogue is not available yet"><span class="nav-icon">▧</span>Reports <span class="nav-status">Planned</span></button>
+              <button class="nav-link nav-link-planned" type="button" disabled aria-disabled="true" title="Historical comparisons need more period-aligned datasets"><span class="nav-icon">◴</span>Historical data <span class="nav-status">Planned</span></button>
+              <button class="nav-link nav-link-planned" type="button" disabled aria-disabled="true" title="A reviewed research collection is not available yet"><span class="nav-icon">⌕</span>Research <span class="nav-status">Planned</span></button>
             </section>
             <section class="nav-group">
-              <h2>Data management</h2>
+              <h2>Data</h2>
               <button class="nav-link" data-view="sources"><span class="nav-icon">◉</span>Data sources</button>
-              <button class="nav-link" data-tab="documents"><span class="nav-icon">▱</span>Documents</button>
-              <button class="nav-link" data-view="imports"><span class="nav-icon">⇧</span>Data imports</button>
-            </section>
-            <section class="nav-group">
-              <h2>Account</h2>
-              <button class="nav-link" data-view="profile"><span class="nav-icon">○</span>User profile</button>
-              <button class="nav-link" data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
+              <button class="nav-link nav-link-planned" type="button" disabled aria-disabled="true" title="Protected imports are available through the API; an administrator dashboard is not built"><span class="nav-icon">⇧</span>Data imports <span class="nav-status">API only</span></button>
             </section>
           </nav>
         </div>
         <div class="sidebar-footer">
           <span class="status-dot"></span>
-          <span><strong>Public data workspace</strong><small>Prototype · read only</small></span>
+          <span><strong>Public data workspace</strong><small>Public indicators · read only</small></span>
           <button class="sidebar-collapse" id="sidebar-toggle" aria-label="Collapse navigation">‹</button>
         </div>
       </aside>

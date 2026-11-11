@@ -371,6 +371,9 @@ test("the browser application is served with security headers", async () => {
   assert.match(html, /National geographic explorer/);
   assert.match(html, /id="indicator-guide"/);
   assert.match(html, /aria-label="Open indicator guide"/);
+  assert.match(html, /nav-link-planned[^>]*disabled[^>]*>.*?Roads &amp; transport.*?Planned/);
+  assert.doesNotMatch(html, /data-view="(?:reports|history|research|profile|settings|imports)"/);
+  assert.doesNotMatch(html, /data-view="(?:national|workspace)"/);
 });
 
 test("the stylesheet, browser application and bundled source catalogue are served", async () => {
@@ -381,6 +384,8 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   ]);
   assert.equal(stylesheet.status, 200);
   assert.match(stylesheet.headers.get("content-type"), /text\/css/);
+  const stylesheetText = await stylesheet.text();
+  assert.match(stylesheetText, /\.nav-link-planned/);
   assert.equal(application.status, 200);
   assert.match(application.headers.get("content-type"), /javascript/);
   const applicationScript = await application.text();
@@ -389,6 +394,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /searchParams\.set\("compare"/);
   assert.match(applicationScript, /indicatorGuideEntries/);
   assert.match(applicationScript, /renderIndicatorGuide/);
+  assert.match(applicationScript, /Provincial economy & labour/);
   assert.equal(sourceCatalogue.status, 200);
   const sources = await sourceCatalogue.json();
   assert.ok(sources.some((source) => source.id === "geoboundaries"));
