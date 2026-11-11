@@ -75,7 +75,9 @@ const state = {
   searchGeneration: 0,
   searchDebounceTimer: null,
   selectionLayer: null,
+  nationalProvinceBordersLayer: null,
   nationalOutlineLayer: null,
+  nationalOutlineCollection: null,
   nationalBounds: null,
   mapResizeObserver: null,
   map: null,
@@ -3816,6 +3818,10 @@ function refreshSelectionLayer() {
 
 function refreshNationalOutlineLayer() {
   if (!state.map) return;
+  if (state.nationalProvinceBordersLayer) {
+    state.map.removeLayer(state.nationalProvinceBordersLayer);
+    state.nationalProvinceBordersLayer = null;
+  }
   if (state.nationalOutlineLayer) {
     state.map.removeLayer(state.nationalOutlineLayer);
     state.nationalOutlineLayer = null;
@@ -3823,16 +3829,101 @@ function refreshNationalOutlineLayer() {
   if (state.view !== "dashboard" || state.selected) return;
   const provinces = state.collections.get("ADM1");
   if (!provinces) return;
-  state.nationalOutlineLayer = L.geoJSON(provinces, {
+  const colors = ["#78a99a", "#b99568", "#7d9ab5", "#ae986d", "#93aa70", "#b07f98", "#68a0a8", "#c78462", "#8e9c83"];
+  const provinceOrder = [
+    "Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo",
+    "Mpumalanga", "North West", "Northern Cape", "Western Cape"
+  ];
+  const provinceColors = new Map(provinceOrder.map((name, index) => [name, colors[index]]));
+  state.nationalProvinceBordersLayer = L.geoJSON(provinces, {
+    style: (feature) => ({
+      color: provinceColors.get(canonicalProvinceName(feature.properties.shapeName)) ?? "#8e9c83",
+      weight: 1.15,
+      opacity: 0.88,
+      fill: false,
+      fillOpacity: 0
+    }),
+    interactive: false
+  }).addTo(state.map);
+  state.nationalOutlineCollection ??= buildNationalOutlineCollection(provinces);
+  state.nationalOutlineLayer = L.geoJSON(state.nationalOutlineCollection, {
     style: {
       color: "#57c7c1",
-      weight: 2.5,
+      weight: 3,
       opacity: 0.95,
       fill: false,
       fillOpacity: 0
     },
     interactive: false
   }).addTo(state.map);
+}
+
+function buildNationalOutlineCollection(provinces) {
+  const coordinateKey = ([longitude, latitude]) => `${longitude.toFixed(6)},${latitude.toFixed(6)}`;
+  const segments = new Map();
+  provinces.features.forEach((feature) => {
+    const polygons = feature.geometry.type === "Polygon"
+      ? [feature.geometry.coordinates]
+      : feature.geometry.type === "MultiPolygon"
+        ? feature.geometry.coordinates
+        : [];
+    polygons.forEach((polygon) => {
+      const exterior = polygon[0] ?? [];
+      for (let index = 0; index < exterior.length - 1; index += 1) {
+        const start = exterior[index];
+        const end = exterior[index + 1];
+        const startKey = coordinateKey(start);
+        const endKey = coordinateKey(end);
+        const segmentKey = startKey < endKey ? `${startKey}|${endKey}` : `${endKey}|${startKey}`;
+        if (segments.has(segmentKey)) segments.delete(segmentKey);
+        else segments.set(segmentKey, { start, end, startKey, endKey });
+      }
+    });
+  });
+
+  const adjacency = new Map();
+  const addAdjacentSegment = (key, segment) => {
+    const attached = adjacency.get(key) ?? [];
+    attached.push(segment);
+    adjacency.set(key, attached);
+  };
+  segments.forEach((segment) => {
+    addAdjacentSegment(segment.startKey, segment);
+    addAdjacentSegment(segment.endKey, segment);
+  });
+  const unused = new Set(segments.values());
+  const lines = [];
+  while (unused.size) {
+    const seed = unused.values().next().value;
+    const startKey = (adjacency.get(seed.startKey)?.length ?? 0) === 1
+      ? seed.startKey
+      : (adjacency.get(seed.endKey)?.length ?? 0) === 1
+        ? seed.endKey
+        : seed.startKey;
+    let currentKey = startKey;
+    const line = [startKey === seed.startKey ? seed.start : seed.end];
+    let firstStep = true;
+    while (true) {
+      const candidates = (adjacency.get(currentKey) ?? []).filter((segment) => unused.has(segment));
+      if (!candidates.length) break;
+      const segment = firstStep ? seed : candidates[0];
+      firstStep = false;
+      unused.delete(segment);
+      const nextKey = segment.startKey === currentKey ? segment.endKey : segment.startKey;
+      line.push(segment.startKey === currentKey ? segment.end : segment.start);
+      currentKey = nextKey;
+      if (currentKey === startKey) break;
+    }
+    if (line.length > 1) lines.push(line);
+  }
+  return {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      properties: { source: "geoBoundaries ADM1 · exterior boundary" },
+      geometry: { type: "MultiLineString", coordinates: lines }
+    }]
+  };
 }
 
 function censusMapRecordForFeature(feature) {
