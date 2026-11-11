@@ -132,7 +132,8 @@ const appRoot = new URL("../", document.currentScript.src);
 const staticDeployment = location.hostname !== "localhost" &&
   location.hostname !== "127.0.0.1" &&
   location.port !== "5500" &&
-  location.port !== "3000";
+  location.port !== "3000" &&
+  !location.hostname.endsWith(".onrender.com");
 const apiOrigin = location.port === "5500"
   ? `${location.protocol}//127.0.0.1:3000`
   : location.origin;
