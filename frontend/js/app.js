@@ -1237,6 +1237,15 @@ function renderCensusData(census, kind) {
     source.append(electricitySourceText);
     addSourceLink(source, electricitySource.url, "Open original Stats SA municipal fact sheet ↗");
   }
+  if (kind === "services") {
+    const serviceSource = state.sources.find((item) => item.id === "stats-sa-service-delivery");
+    if (serviceSource) {
+      const serviceNote = document.createElement("p");
+      serviceNote.textContent = "For published municipal water-interruption measures (households reporting an interruption in the prior 12 months) and comparable 2011/2022 basic-service access indicators, see Stats SA Report 03-01-83. The report values are not live outage monitoring.";
+      source.append(serviceNote);
+      addSourceLink(source, serviceSource.dataUrl, "Open Stats SA municipal service-delivery report ↗");
+    }
+  }
   const terms = document.createElement("p");
   terms.className = "census-terms";
   terms.textContent = "Stats SA terms require attribution and prohibit selling the original or reprocessed data without prior permission.";
@@ -2810,8 +2819,12 @@ function renderProjectRecords(parent, result, typeSelect) {
   output.className = "projects-results";
   const projectNote = document.createElement("p");
   projectNote.className = "finance-source-note project-scope-note";
-  projectNote.textContent = "This is reported municipal capital acquisition and asset expenditure, not a named project register. The source does not identify project names, locations, schedules, contractors or completion status. Do not interpret accounting line items as individual infrastructure projects.";
+  projectNote.textContent = "The table below is reported municipal capital-acquisition expenditure by accounting category; it is not a list of named projects. National Treasury and OpenUp publish a separate municipality-filtered register with named infrastructure projects, budget, type and project status. The register notes that 2026 Q2 data is still being checked for completeness and integrity.";
   output.append(projectNote);
+  const projectRegister = new URL("https://municipalmoney.gov.za/infrastructure/projects/");
+  projectRegister.searchParams.set("municipality", result.municipality.name);
+  projectRegister.searchParams.set("province", result.municipality.province);
+  addSourceLink(output, projectRegister.toString(), `Open ${result.municipality.name} named infrastructure project register ↗`);
 
   if (!result.treasuryMunicipality) {
     addDetailMessage(output, "No exact Treasury municipality match", `National Treasury did not return a matching municipality for ${result.municipality.name}.`);

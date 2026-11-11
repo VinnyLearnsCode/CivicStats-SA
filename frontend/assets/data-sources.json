@@ -33,6 +33,16 @@
     "detail": "Census municipal fact-sheet values for 2011 and 2022: share of households reporting electricity as their main source for lighting, matched to all 213 municipalities. This is not a measure of grid connection, electricity availability or service reliability."
   },
   {
+    "id": "stats-sa-service-delivery",
+    "name": "Statistics South Africa · basic service delivery",
+    "publisher": "Statistics South Africa",
+    "url": "https://www.statssa.gov.za/",
+    "license": "Stats SA requires attribution; reprocessed data may not be sold without prior permission.",
+    "dataUrl": "https://www.statssa.gov.za/publications/Report-03-01-83/Report-03-01-832022.pdf",
+    "status": "report-only",
+    "detail": "Official Census 2011 and 2022 municipal access measures for improved water, sanitation, weekly refuse removal and electricity. The report also gives the percentage of households reporting water interruptions during the previous 12 months. These are dated household survey measures, not live outage monitoring or a general reliability score."
+  },
+  {
     "id": "stats-sa-gdp-r",
     "name": "Statistics South Africa · Provincial GDP-R",
     "publisher": "Statistics South Africa",
@@ -111,7 +121,17 @@
     "apiUrl": "https://municipaldata.treasury.gov.za/api/cubes",
     "portalUrl": "https://municipaldata.treasury.gov.za/docs",
     "status": "live-api",
-    "detail": "Live Municipal Money API: income and expenditure, financial position, capital acquisition, grants, repairs and maintenance, UIFW expenditure, and audit-opinion records. Capital Acquisition (v2) provides Section 71 mSCOA expenditure categories, not a named project register. Audit opinions link available reports; the Treasury municipality directory provides official municipal website links. Amounts are reported in South African rand."
+    "detail": "Live Municipal Money API: income and expenditure, financial position, capital acquisition, grants, repairs and maintenance, UIFW expenditure, and audit-opinion records. Capital Acquisition (v2) provides Section 71 mSCOA expenditure categories. A separate National Treasury and OpenUp register provides named infrastructure-project records. Audit opinions link available reports; the Treasury municipality directory provides official municipal website links. Amounts are reported in South African rand."
+  },
+  {
+    "id": "treasury-project-register",
+    "name": "National Treasury & OpenUp · municipal infrastructure projects",
+    "publisher": "National Treasury and OpenUp · Municipal Money",
+    "url": "https://municipalmoney.gov.za/infrastructure/projects/",
+    "license": "Municipal Money data terms of use",
+    "portalUrl": "https://municipalmoney.gov.za/infrastructure/projects/",
+    "status": "portal-only",
+    "detail": "Public named municipal infrastructure project register with budget, function, type and project-status fields. The portal reports 2026 Q2 figures and notes that completeness and integrity checks are in progress. It is available as a municipality-filtered source link; it is not the same dataset as Treasury Capital Acquisition (v2)."
   },
   {
     "id": "agsa",
