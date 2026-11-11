@@ -136,7 +136,8 @@
                 </div>
               </div>
               <div class="map-wrap">
-                <div id="map" role="application" aria-label="Interactive map of South Africa"></div>
+                <div id="map" role="application" aria-label="Interactive map of South Africa" aria-describedby="map-keyboard-instructions"></div>
+                <span class="visually-hidden" id="map-keyboard-instructions">Map areas are keyboard accessible. Press Tab to focus an area, use arrow keys to move through areas alphabetically, Home or End to jump to the first or last area, and Enter or Space to select or compare the focused area.</span>
                 <div class="map-overlay map-top-left">
                   <span class="map-coordinate" id="map-location">SOUTH AFRICA · 9 PROVINCES</span>
                   <span class="map-scale">1 : <span id="map-scale">—</span></span>
@@ -197,6 +198,7 @@
                 <span id="boundary-count">— boundary features</span>
                 <span>Source: geoBoundaries · OCHA ROSEA / Municipal Demarcation Board</span>
                 <a href="https://www.geoboundaries.org/" target="_blank" rel="noreferrer">Source &amp; licence ↗</a>
+                <span class="map-keyboard-hint" id="map-keyboard-hint">Keyboard: Tab to an area · arrows move by name · Enter or Space opens it.</span>
                 <button class="map-data-table-toggle" id="map-data-table-toggle" type="button" aria-expanded="false" aria-controls="map-data-table-panel">View map data as a table</button>
               </div>
               <section class="map-data-table-panel" id="map-data-table-panel" aria-label="Accessible map data table" hidden>

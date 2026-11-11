@@ -4,6 +4,7 @@ const state = {
   boundaryLevel: "ADM3",
   mapLayer: "population",
   mapDataTableOpen: false,
+  mapRovingId: null,
   censusMapRecords: new Map(),
   censusMapYear: 2022,
   censusMapRequestId: 0,
@@ -3160,6 +3161,7 @@ function updateProfile(selected) {
       layer.setStyle(isSelected ? selectedStyle() : mapStyle(layer.feature));
       if (isSelected && state.boundaryLevel !== "ADM1") layer.bringToFront();
     });
+    updateMapRegionAccessibility();
   }
 }
 
@@ -3975,6 +3977,7 @@ function refreshMapStyles() {
   refreshSelectionLayer();
   renderMapLegend();
   updateMapLayerControls();
+  updateMapRegionAccessibility();
   if (state.mapDataTableOpen) renderMapDataTable();
 }
 
@@ -4026,6 +4029,89 @@ async function loadCensusMapData(year) {
   }
 }
 
+function orderedMapLayers() {
+  return state.boundaryLayer?.getLayers()
+    .filter((layer) => layer.feature?.properties?.shapeID)
+    .sort((left, right) => left.feature.properties.shapeName.localeCompare(right.feature.properties.shapeName)) ?? [];
+}
+
+function updateMapRegionAccessibility() {
+  const layers = orderedMapLayers();
+  if (!layers.length) return;
+  const activeIdExists = layers.some((layer) => layer.feature.properties.shapeID === state.mapRovingId);
+  if (!activeIdExists) {
+    const selected = layers.find((layer) => layer.feature.properties.shapeID === state.selected?.id);
+    state.mapRovingId = selected?.feature.properties.shapeID ?? layers[0].feature.properties.shapeID;
+  }
+  layers.forEach((layer) => {
+    const feature = layer.feature;
+    const properties = feature.properties;
+    const path = layer.getElement();
+    if (!path) return;
+    path.setAttribute("role", "button");
+    path.setAttribute("focusable", "true");
+    path.setAttribute("tabindex", properties.shapeID === state.mapRovingId ? "0" : "-1");
+    const action = state.comparisonMode
+      ? state.comparisonSelections.includes(properties.shapeID)
+        ? "Press Enter or Space to remove this area from comparison."
+        : "Press Enter or Space to add this area to comparison."
+      : "Press Enter or Space to open this area.";
+    path.setAttribute("aria-label", `${mapTooltip(feature)}. ${action} Use arrow keys to move by area name; Home and End jump to the first and last area.`);
+    if (state.comparisonMode) {
+      path.setAttribute("aria-pressed", String(state.comparisonSelections.includes(properties.shapeID)));
+      path.removeAttribute("aria-current");
+    } else {
+      path.removeAttribute("aria-pressed");
+      if (properties.shapeID === state.selected?.id) path.setAttribute("aria-current", "true");
+      else path.removeAttribute("aria-current");
+    }
+    if (path.dataset.keyboardNavigationReady) return;
+    path.dataset.keyboardNavigationReady = "true";
+    path.addEventListener("keydown", (event) => handleMapRegionKeydown(layer, event));
+    path.addEventListener("focus", () => {
+      state.mapRovingId = properties.shapeID;
+      updateMapRegionAccessibility();
+      layer.setTooltipContent(mapTooltip(feature));
+      layer.openTooltip();
+      layer.bringToFront();
+    });
+    path.addEventListener("blur", () => layer.closeTooltip());
+  });
+}
+
+function activateMapRegion(feature) {
+  if (state.comparisonMode) {
+    if (feature.properties.shapeType !== "ADM3") {
+      showToast("Map comparison currently supports municipalities only. Switch to Municipalities to select places.");
+      return;
+    }
+    toggleMapComparison(feature.properties.shapeID);
+    return;
+  }
+  const item = state.geographies.find((geography) => geography.id === feature.properties.shapeID);
+  if (item) void selectGeography(item);
+}
+
+function handleMapRegionKeydown(layer, event) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    activateMapRegion(layer.feature);
+    return;
+  }
+  const directions = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+  const layers = orderedMapLayers();
+  const currentIndex = layers.findIndex((item) => item.feature.properties.shapeID === layer.feature.properties.shapeID);
+  let nextIndex = null;
+  if (event.key in directions) nextIndex = (currentIndex + directions[event.key] + layers.length) % layers.length;
+  else if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = layers.length - 1;
+  if (nextIndex === null || !layers[nextIndex]) return;
+  event.preventDefault();
+  state.mapRovingId = layers[nextIndex].feature.properties.shapeID;
+  updateMapRegionAccessibility();
+  layers[nextIndex].getElement()?.focus();
+}
+
 function setMapLayer(collection) {
   if (state.boundaryLayer) state.map.removeLayer(state.boundaryLayer);
   state.boundaryLayer = L.geoJSON(collection, {
@@ -4047,20 +4133,7 @@ function setMapLayer(collection) {
         mouseout: () => {
           layer.setStyle(styleForFeature(feature));
         },
-        click: () => {
-          if (state.comparisonMode) {
-            if (feature.properties.shapeType !== "ADM3") {
-              showToast("Map comparison currently supports municipalities only. Switch to Municipalities to select places.");
-              return;
-            }
-            toggleMapComparison(feature.properties.shapeID);
-            return;
-          }
-          const item = state.geographies.find((geography) =>
-            geography.id === feature.properties.shapeID
-          );
-          if (item) void selectGeography(item);
-        }
+        click: () => activateMapRegion(feature)
       });
     }
   }).addTo(state.map);
@@ -4068,6 +4141,7 @@ function setMapLayer(collection) {
     `${collection.features.length} ${state.boundaryLevel === "ADM1" ? "provinces" : state.boundaryLevel === "ADM2" ? "districts & metros" : "municipal boundaries"}`;
   updateMapLayerControls();
   renderMapLegend();
+  updateMapRegionAccessibility();
   if (state.mapDataTableOpen) renderMapDataTable();
   const bounds = state.boundaryLayer.getBounds();
   if (state.boundaryLevel === "ADM3" && bounds.isValid()) state.nationalBounds = bounds;
@@ -4189,6 +4263,11 @@ function renderMapComparisonSelection() {
     list.append(chip);
   });
   compareButton.disabled = state.comparisonSelections.length < 2;
+  const keyboardHint = document.querySelector("#map-keyboard-hint");
+  if (keyboardHint) keyboardHint.textContent = state.comparisonMode
+    ? "Keyboard: Tab to an area · arrows move by name · Enter or Space adds or removes it from comparison."
+    : "Keyboard: Tab to an area · arrows move by name · Enter or Space opens it.";
+  updateMapRegionAccessibility();
 }
 
 function toggleMapComparison(id) {

@@ -392,6 +392,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(stylesheetText, /\.retry-button/);
   assert.match(stylesheetText, /\.compare-mobile-card/);
   assert.match(stylesheetText, /\.map-legend-band-rank/);
+  assert.match(stylesheetText, /\.leaflet-interactive:focus-visible/);
   assert.equal(application.status, 200);
   assert.match(application.headers.get("content-type"), /javascript/);
   const applicationScript = await application.text();
@@ -404,6 +405,9 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /function renderMapDataTable/);
   assert.match(applicationScript, /Band 1 is lowest and Band 5 is highest/);
   assert.match(applicationScript, /Band \$\{index \+ 1\}/);
+  assert.match(applicationScript, /function handleMapRegionKeydown/);
+  assert.match(applicationScript, /ArrowRight: 1/);
+  assert.match(applicationScript, /Press Enter or Space to open this area/);
   assert.match(applicationScript, /Use the arrow keys to review results/);
   assert.match(applicationScript, /function addDetailError/);
   assert.match(applicationScript, /Retrying…/);
@@ -414,6 +418,8 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   const indexHtml = await index.text();
   assert.match(indexHtml, /role="combobox" aria-autocomplete="list"/);
   assert.match(indexHtml, /map-data-table-toggle/);
+  assert.match(indexHtml, /aria-describedby="map-keyboard-instructions"/);
+  assert.match(indexHtml, /id="map-keyboard-hint"/);
   assert.match(indexHtml, /aria-live="polite"/);
   assert.equal(sourceCatalogue.status, 200);
   const sources = await sourceCatalogue.json();

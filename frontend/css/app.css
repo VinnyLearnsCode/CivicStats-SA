@@ -758,3 +758,8 @@ body { font-size: 14px; line-height: 1.5; }
 }
 
 .map-legend-band-rank { display: inline-grid; width: 19px; height: 19px; flex: 0 0 auto; place-items: center; border: 1px solid #85918b; color: var(--text); font: 10px var(--mono); }
+
+.leaflet-interactive:focus-visible { outline: none; stroke: #fff !important; stroke-width: 3px !important; filter: drop-shadow(0 0 2px #000); }
+
+.map-keyboard-hint { color: #aab5af; font-size: 10px; line-height: 1.4; }
+@media (max-width: 640px) { .map-keyboard-hint { flex: 1 1 100%; order: 4; } }
