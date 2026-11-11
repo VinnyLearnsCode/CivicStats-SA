@@ -389,6 +389,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(stylesheetText, /\.nav-link-planned/);
   assert.match(stylesheetText, /\.map-data-table-panel/);
   assert.match(stylesheetText, /\.visually-hidden/);
+  assert.match(stylesheetText, /\.retry-button/);
   assert.equal(application.status, 200);
   assert.match(application.headers.get("content-type"), /javascript/);
   const applicationScript = await application.text();
@@ -401,6 +402,9 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /function renderMapDataTable/);
   assert.match(applicationScript, /Colours are grouped into five bands/);
   assert.match(applicationScript, /Use the arrow keys to review results/);
+  assert.match(applicationScript, /function addDetailError/);
+  assert.match(applicationScript, /Retrying…/);
+  assert.match(applicationScript, /Retry Census data/);
   assert.equal(index.status, 200);
   const indexHtml = await index.text();
   assert.match(indexHtml, /role="combobox" aria-autocomplete="list"/);

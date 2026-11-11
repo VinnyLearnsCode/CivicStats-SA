@@ -732,3 +732,7 @@ body { font-size: 14px; line-height: 1.5; }
   .map-data-table-panel { padding: 10px 8px; }
   .map-data-table-toggle { min-height: 40px; }
 }
+
+.retry-button { margin-top: 9px; }
+.empty-data .retry-button { align-self: flex-start; }
+.map-legend-items > .retry-button { align-self: flex-start; }

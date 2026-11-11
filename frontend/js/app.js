@@ -1352,7 +1352,7 @@ function renderCensusProfile(kind) {
   }).catch((error) => {
     if (requestId !== state.censusRequestId || state.tab !== kind || state.selected?.id !== selected.id) return;
     detailBody.replaceChildren();
-    addDetailMessage(detailBody, "Census dataset unavailable", `${error.message} Keep the Node API running with “npm start” and reload the page.`);
+    addDetailError(detailBody, "Census dataset unavailable", `${error.message} Check your connection and try the request again.`);
   });
 }
 
@@ -1422,7 +1422,7 @@ function renderOverviewCensus(selected) {
     if (requestId !== state.overviewCensusRequestId ||
       state.tab !== "overview" || state.selected?.id !== selected.id) return;
     section.replaceChildren();
-    addDetailMessage(section, "Census data unavailable", `${error.message} Keep the Node API running with “npm start” and reload.`);
+    addDetailError(section, "Census data unavailable", `${error.message} Check your connection and try the request again.`, () => renderDetail());
   });
 }
 
@@ -1509,7 +1509,7 @@ function renderClimateDetail() {
   }).catch((error) => {
     if (requestId !== state.climateRequestId || state.tab !== "climate" || state.selected?.id !== selected.id) return;
     detailBody.replaceChildren();
-    addDetailMessage(detailBody, "Climate data unavailable", `${error.message} No substitute values were used. Keep the Node API running with “npm start” and retry.`);
+    addDetailError(detailBody, "Climate data unavailable", `${error.message} No substitute values were used. Check your connection and try again.`);
     addSourceLink(detailBody, "https://power.larc.nasa.gov/", "Open NASA POWER data portal ↗");
   });
 }
@@ -1523,6 +1523,24 @@ function addDetailMessage(parent, titleText, descriptionText, className = "empty
   description.textContent = descriptionText;
   box.append(title, description);
   parent.append(box);
+}
+
+function addRetryButton(parent, retry, label = "Try again") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "action-button retry-button";
+  button.textContent = label;
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    button.textContent = "Retrying…";
+    retry();
+  });
+  parent.append(button);
+}
+
+function addDetailError(parent, titleText, descriptionText, retry = () => renderDetail()) {
+  addDetailMessage(parent, titleText, descriptionText);
+  addRetryButton(parent.lastElementChild, retry);
 }
 
 function addSourceLink(parent, href, label) {
@@ -1585,17 +1603,17 @@ function renderFinanceDetail() {
     detailBody.replaceChildren(controls);
 
     if (financeResult.status === "rejected") {
-      addDetailMessage(
+      addDetailError(
         detailBody,
         "Treasury finance data unavailable",
-        `No finance values were substituted. ${financeResult.reason.message} If using Live Server, start the API with “npm start” and reload.`
+        `No finance values were substituted. ${financeResult.reason.message} Try again when the source is available.`
       );
     } else {
       renderFinanceRecords(detailBody, financeResult.value, typeSelect);
     }
 
     if (auditResult.status === "rejected") {
-      addDetailMessage(detailBody, "Audit opinion unavailable", auditResult.reason.message);
+      addDetailError(detailBody, "Audit opinion unavailable", auditResult.reason.message);
     } else {
       renderAuditOpinion(detailBody, auditResult.value);
     }
@@ -1765,7 +1783,7 @@ function renderFinanceSupplemental(parent, result) {
     section.append(heading);
 
     if (dataset.error) {
-      addDetailMessage(section, "Supplemental Treasury data unavailable", `${dataset.error} The income and expenditure records above remain available independently.`);
+      addDetailError(section, "Supplemental Treasury data unavailable", `${dataset.error} The income and expenditure records above remain available independently. Try again to reload this section.`);
       parent.append(section);
       return;
     }
@@ -1951,7 +1969,7 @@ function renderEconomyDetail() {
   }).catch((error) => {
     if (requestId !== state.economyRequestId || state.tab !== "economy" || state.selected?.id !== selected.id) return;
     detailBody.replaceChildren(controls, scopeNote);
-    addDetailMessage(detailBody, "Treasury revenue data unavailable", `${error.message} No figures were substituted. If using Live Server, start the API with “npm start” and reload.`);
+    addDetailError(detailBody, "Treasury revenue data unavailable", `${error.message} No figures were substituted. Try again when the source is available.`);
     addSourceLink(detailBody, "https://municipaldata.treasury.gov.za/", "Open National Treasury Municipal Money ↗");
     renderNationalEconomyContext(detailBody, requestId, selected.id);
   });
@@ -1977,7 +1995,7 @@ function renderProvincialUnemploymentDetail(economyRequestId) {
     if (requestId !== state.labourProfileRequestId || state.tab !== "economy" || state.selected?.id !== selected.id) return;
     detailBody.replaceChildren();
     if (!dataset) {
-      addDetailMessage(detailBody, "Provincial unemployment data unavailable", `${state.labourMapError ?? "The local data endpoint did not return the Stats SA dataset."} Keep the Node API running with “npm start” and reload.`);
+      addDetailError(detailBody, "Provincial unemployment data unavailable", `${state.labourMapError ?? "The data endpoint did not return the Stats SA dataset."} Try again to request the source data.`);
       addSourceLink(detailBody, "https://www.statssa.gov.za/publications/P0211/P02113rdQuarter2026.pdf", "Open the official Stats SA release ↗");
       renderNationalEconomyContext(detailBody, economyRequestId, selected.id);
       return;
@@ -2319,7 +2337,7 @@ function renderNationalEconomyContext(parent, requestId, selectedId) {
   }).catch((error) => {
     if (requestId !== state.economyRequestId || state.tab !== "economy" || state.selected?.id !== selectedId) return;
     section.replaceChildren();
-    addDetailMessage(section, "National economic indicators unavailable", `${error.message} No source substitution was used.`);
+    addDetailError(section, "National economic indicators unavailable", `${error.message} No source substitution was used. Try again to contact the source.`);
     addSourceLink(section, "https://data.worldbank.org/country/south-africa", "Open World Bank South Africa data ↗");
   });
 }
@@ -2338,7 +2356,7 @@ function renderProvincialGdpContext(parent, requestId, selectedId) {
     heading.textContent = "Provincial economic activity · Stats SA GDP-R";
     section.append(heading);
     if (!dataset) {
-      addDetailMessage(section, "Provincial GDP-R unavailable", `${state.economyMapError ?? "The bundled Stats SA dataset could not be loaded."} No values were substituted.`);
+      addDetailError(section, "Provincial GDP-R unavailable", `${state.economyMapError ?? "The Stats SA dataset could not be loaded."} No values were substituted. Try again to load this dataset.`);
       addSourceLink(section, "https://www.statssa.gov.za/publications/P04412/P044122024.pdf", "Open Stats SA Provincial GDP, 2024 ↗");
       return;
     }
@@ -2602,17 +2620,17 @@ function renderPoliticsDetail() {
     detailBody.append(auditLabel);
 
     if (politicsResult.status === "rejected") {
-      addDetailMessage(
+      addDetailError(
         detailBody,
         "IEC councillor data unavailable",
-        `${politicsResult.reason.message} No political representation values were substituted. If using Live Server, start the API with “npm start” and reload.`
+        `${politicsResult.reason.message} No political representation values were substituted. Try again when the source is available.`
       );
     } else {
       renderMunicipalCouncilSeats(detailBody, politicsResult.value);
     }
 
     if (auditResult.status === "rejected") {
-      addDetailMessage(detailBody, `Audit opinion unavailable · FY ${state.politicsAuditYear}`, auditResult.reason.message);
+      addDetailError(detailBody, `Audit opinion unavailable · FY ${state.politicsAuditYear}`, auditResult.reason.message);
     } else {
       renderAuditOpinion(detailBody, auditResult.value);
     }
@@ -2740,7 +2758,7 @@ function renderDocumentsProjects() {
         state.tab !== "documents" || state.selected?.id !== selected.id ||
         state.documentsProjectsPane !== "documents") return;
       detailBody.replaceChildren(createDocumentsProjectsNavigation());
-      addDetailMessage(detailBody, "Municipal documents unavailable", `${error.message} No documents were substituted. If using Live Server, start the API with “npm start” and reload.`);
+      addDetailError(detailBody, "Municipal documents unavailable", `${error.message} No documents were substituted. Try again when the source is available.`);
       addSourceLink(detailBody, "https://municipaldata.treasury.gov.za/", "Open National Treasury Municipal Money ↗");
     });
     return;
@@ -2787,7 +2805,7 @@ function renderNamedMunicipalProjects(selected, requestId, navigation) {
     if (requestId !== state.documentsProjectsRequestId || state.tab !== "documents" ||
       state.selected?.id !== selected.id || state.documentsProjectsPane !== "named-projects") return;
     parent.replaceChildren(navigation, controls);
-    addDetailMessage(parent, "Named project data unavailable", `${error.message} No project records were substituted.`);
+    addDetailError(parent, "Named project data unavailable", `${error.message} No project records were substituted. Try again when the source is available.`);
     addSourceLink(parent, "https://municipalmoney.gov.za/infrastructure/projects/", "Open Municipal Money project register ↗");
   });
 }
@@ -2995,7 +3013,7 @@ function renderMunicipalProjects(selected, requestId, navigation) {
       state.tab !== "documents" || state.selected?.id !== selected.id ||
       state.documentsProjectsPane !== "projects") return;
     parent.replaceChildren(navigation, controls);
-    addDetailMessage(parent, "Capital acquisition data unavailable", `${error.message} No project or expenditure values were substituted. If using Live Server, start the API with “npm start” and reload.`);
+    addDetailError(parent, "Capital acquisition data unavailable", `${error.message} No project or expenditure values were substituted. Try again when the source is available.`);
     addSourceLink(parent, "https://municipaldata.treasury.gov.za/docs#cube-capital_v2", "Open National Treasury Capital Acquisition documentation ↗");
   });
 }
@@ -3557,6 +3575,13 @@ function renderMapLegend() {
   if (state.mapLayer === "boundaries") {
     heading.textContent = "BOUNDARY KEY";
     items.innerHTML = '<span><i class="legend-line active-line"></i>Selected municipality</span><span><i class="legend-line"></i>Municipal boundary</span><span class="legend-note">Real geoBoundaries polygons · 2020 vintage</span>';
+    if (state.censusMapError) {
+      const failure = document.createElement("span");
+      failure.className = "legend-note";
+      failure.textContent = "Census map data is temporarily unavailable.";
+      items.append(failure);
+      addRetryButton(items, () => void loadCensusMapData(state.censusMapYear), "Retry Census data");
+    }
     return;
   }
   if (state.mapLayer === "unemployment") {
@@ -3597,6 +3622,14 @@ function renderMapLegend() {
           : "Census map values are unavailable.";
     }
     items.append(note);
+    const failed = state.mapLayer === "unemployment" ? Boolean(state.labourMapError)
+      : state.mapLayer === "economy" ? Boolean(state.economyMapError)
+        : Boolean(state.censusMapError);
+    if (failed) addRetryButton(items, () => {
+      if (state.mapLayer === "unemployment") void loadProvincialLabourData();
+      else if (state.mapLayer === "economy") void loadProvincialGdpData(state.economyMapYear);
+      else void loadCensusMapData(state.censusMapYear);
+    }, "Retry data");
     return;
   }
   const values = records
@@ -4312,7 +4345,7 @@ function renderSourceCards() {
 
 function renderCitiesNetworkPublications() {
   if (state.publicationError) {
-    return `<section class="publication-section"><h3>South African Cities Network publications</h3><p class="finance-source-note">Live publication feed unavailable: ${escapeHtml(state.publicationError)}</p><a href="https://sacities.net/" target="_blank" rel="noopener noreferrer">Open South African Cities Network ↗</a></section>`;
+    return `<section class="publication-section"><h3>South African Cities Network publications</h3><p class="finance-source-note">Live publication feed unavailable: ${escapeHtml(state.publicationError)}</p><button class="action-button retry-button" type="button" data-retry-publications>Try again</button><a href="https://sacities.net/" target="_blank" rel="noopener noreferrer">Open South African Cities Network ↗</a></section>`;
   }
   if (!state.publications.length) {
     const message = state.publicationsLoaded
@@ -4412,7 +4445,7 @@ function renderAlternateView() {
     content = renderMunicipalityTable();
   } else if (state.view === "sources") {
     const connectionNote = state.integrationError
-      ? `<div class="compare-empty">Live provider status unavailable: ${escapeHtml(state.integrationError)}. If this page is open in Live Server, start the API with <code>npm start</code>.</div>`
+      ? `<div class="compare-empty">Live provider status unavailable: ${escapeHtml(state.integrationError)}.<br><button class="action-button retry-button" type="button" data-retry-integrations>Try again</button></div>`
       : state.integrations.length
         ? `<p class="source-check-note">Provider status checked ${escapeHtml(new Date(state.integrations[0].checkedAt).toLocaleString("en-ZA"))}. A portal-only label means no public structured API has been verified.</p>`
         : `<p class="source-check-note">Checking live provider connections…</p>`;
@@ -4442,6 +4475,19 @@ function renderAlternateView() {
   });
   const exportButton = document.querySelector("#export-municipalities");
   if (exportButton) exportButton.addEventListener("click", exportMunicipalityDirectory);
+  alternateView.querySelectorAll("[data-retry-publications], [data-retry-integrations]").forEach((button) => {
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      button.textContent = "Retrying…";
+      if (button.hasAttribute("data-retry-publications")) state.publicationError = null;
+      if (button.hasAttribute("data-retry-integrations")) state.integrationError = null;
+      state.publicationsLoaded = false;
+      state.publications = [];
+      state.integrations = [];
+      renderAlternateView();
+      void loadLiveSourceData();
+    });
+  });
   if (state.view === "comparisons") initializeComparison();
 }
 
@@ -5010,7 +5056,11 @@ async function initialize() {
   if (typeof L === "undefined") {
     document.querySelector("#map-loading").hidden = true;
     const error = document.querySelector("#map-error");
-    error.textContent = "The map library did not load. Check the connection to unpkg.com and reload the page.";
+    error.replaceChildren();
+    const message = document.createElement("p");
+    message.textContent = "The map library did not load. Check your connection and try again.";
+    error.append(message);
+    addRetryButton(error, () => window.location.reload());
     error.hidden = false;
     return;
   }
@@ -5077,9 +5127,13 @@ async function initialize() {
   } catch (error) {
     document.querySelector("#map-loading").hidden = true;
     const mapError = document.querySelector("#map-error");
-    mapError.textContent = `Boundary data could not be loaded: ${error.message}`;
+    mapError.replaceChildren();
+    const message = document.createElement("p");
+    message.textContent = `Map data could not be loaded: ${error.message}`;
+    mapError.append(message);
+    addRetryButton(mapError, () => window.location.reload());
     mapError.hidden = false;
-    showToast("Workspace data could not be loaded. Check that the bundled GeoJSON files are available.");
+    showToast("Map data could not be loaded. You can try again from the map.");
   }
 }
 
