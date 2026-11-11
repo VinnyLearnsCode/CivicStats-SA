@@ -30,6 +30,7 @@ const state = {
   integrationError: null,
   publications: [],
   publicationError: null,
+  publicationsLoaded: false,
   financeYear: 2024,
   financeType: "AUDA",
   financeRequestId: 0,
@@ -3874,6 +3875,7 @@ async function loadCensusMapData(year) {
     state.censusMapLoading = false;
     refreshMapStyles();
     renderNationalMetrics();
+    if (state.view === "municipalities") renderAlternateView();
   } catch (error) {
     if (requestId !== state.censusMapRequestId) return;
     state.censusMapError = error.message;
@@ -3882,6 +3884,7 @@ async function loadCensusMapData(year) {
     if (["population", "growth", "water", "electricity"].includes(state.mapLayer)) state.mapLayer = "boundaries";
     refreshMapStyles();
     renderNationalMetrics();
+    if (state.view === "municipalities") renderAlternateView();
   }
 }
 
@@ -4151,15 +4154,26 @@ function renderNationalMetrics() {
 }
 
 function renderMunicipalityTable() {
-  const rows = state.municipalities.map((item) => `
+  const rows = state.municipalities.map((item) => {
+    const hasCensus = state.censusMapRecords.has(item.id);
+    const status = hasCensus
+      ? `CENSUS ${state.censusMapYear} LOADED`
+      : state.censusMapLoading
+        ? "CENSUS LOADING"
+        : state.censusMapError
+          ? "CENSUS UNAVAILABLE"
+          : "NO CENSUS RECORD";
+    const statusClass = hasCensus ? "loaded" : state.censusMapError ? "unavailable" : "";
+    return `
     <tr>
       <td><button data-select-id="${escapeHtml(item.id)}">${escapeHtml(item.name)}</button></td>
       <td>${escapeHtml(item.province || "—")}</td>
       <td>${escapeHtml(item.district || "—")}</td>
       <td class="mono">${escapeHtml(item.level)}</td>
       <td class="mono">${escapeHtml(formatArea(item.areaKm2))}</td>
-      <td><span class="status-pill">INDICATORS NOT LOADED</span></td>
-    </tr>`).join("");
+      <td><span class="status-pill ${statusClass}">${escapeHtml(status)}</span></td>
+    </tr>`;
+  }).join("");
   return `<div class="data-table-wrap"><table class="data-table">
     <thead><tr><th>Municipality</th><th>Province</th><th>District / metro</th><th>Boundary</th><th>Calculated area</th><th>Data status</th></tr></thead>
     <tbody>${rows}</tbody>
@@ -4187,6 +4201,8 @@ function renderSourceCards() {
       <p>${escapeHtml(detail)}</p>
       <p><span class="mono">${escapeHtml(source.publisher)} · ${escapeHtml(source.license)}</span></p>
       <a href="${escapeHtml(portalUrl)}" target="_blank" rel="noopener noreferrer">Visit official source ↗</a>
+      ${source.dataPeriod ? `<p class="source-checked-at">Data period: ${escapeHtml(source.dataPeriod)}.</p>` : ""}
+      ${source.publishedAt ? `<p class="source-checked-at">Source released: ${escapeHtml(new Date(`${source.publishedAt}T00:00:00Z`).toLocaleDateString("en-ZA", { timeZone: "UTC" }))}.</p>` : ""}
       ${source.dataUrl ? `<a href="${escapeHtml(source.dataUrl)}" target="_blank" rel="noopener noreferrer">Open original data ↗</a>` : ""}
       ${source.datasetUrl ? `<a href="${escapeHtml(source.datasetUrl)}" target="_blank" rel="noopener noreferrer">Open dataset extract ↗</a>` : ""}
       ${source.apiUrl ? `<a href="${escapeHtml(source.apiUrl)}" target="_blank" rel="noopener noreferrer">Open API ↗</a>` : ""}
@@ -4199,7 +4215,10 @@ function renderCitiesNetworkPublications() {
     return `<section class="publication-section"><h3>South African Cities Network publications</h3><p class="finance-source-note">Live publication feed unavailable: ${escapeHtml(state.publicationError)}</p><a href="https://sacities.net/" target="_blank" rel="noopener noreferrer">Open South African Cities Network ↗</a></section>`;
   }
   if (!state.publications.length) {
-    return `<section class="publication-section"><h3>South African Cities Network publications</h3><p class="finance-source-note">Loading the official public publications feed…</p></section>`;
+    const message = state.publicationsLoaded
+      ? "The live feed responded, but no publications were returned. Open the official site to browse its catalogue."
+      : "Loading the official public publications feed…";
+    return `<section class="publication-section"><h3>South African Cities Network publications</h3><p class="finance-source-note">${message}</p>${state.publicationsLoaded ? '<a href="https://sacities.net/" target="_blank" rel="noopener noreferrer">Open South African Cities Network ↗</a>' : ""}</section>`;
   }
   const items = state.publications.map((publication) => `
     <article class="publication-item">
@@ -4228,8 +4247,10 @@ async function loadLiveSourceData() {
   if (publicationResult.status === "fulfilled") {
     state.publications = publicationResult.value.publications;
     state.publicationError = null;
+    state.publicationsLoaded = true;
   } else {
     state.publicationError = publicationResult.reason.message;
+    state.publicationsLoaded = true;
   }
   if (state.view === "sources") renderAlternateView();
 }

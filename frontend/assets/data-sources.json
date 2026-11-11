@@ -6,7 +6,8 @@
     "url": "https://www.geoboundaries.org/",
     "license": "CC BY 3.0 IGO",
     "status": "loaded",
-    "detail": "ADM1, ADM2 and ADM3 boundary files; boundary year represented: 2020."
+    "detail": "ADM1, ADM2 and ADM3 boundary files; boundary year represented: 2020.",
+    "dataPeriod": "2020 boundary vintage"
   },
   {
     "id": "stats-sa",
@@ -18,7 +19,9 @@
     "dataUrl": "https://census.statssa.gov.za/assets/documents/2022/Provinces_at_a_Glance.pdf",
     "datasetUrl": "https://github.com/afrith/census-2022-muni-stats/tree/main",
     "status": "loaded",
-    "detail": "Bundled Census 2022 municipal extract for all 213 municipalities: population, age, households, dwelling types, water, sanitation and cooking-energy counts. Employment-status, unemployment-rate and industry tables are not included in this extract. Source publication: Stats SA, Census 2022: Provinces at a Glance, released 10 October 2023."
+    "detail": "Bundled Census 2022 municipal extract for all 213 municipalities: population, age, households, dwelling types, water, sanitation and cooking-energy counts. Employment-status, unemployment-rate and industry tables are not included in this extract. Source publication: Stats SA, Census 2022: Provinces at a Glance, released 10 October 2023.",
+    "dataPeriod": "Census 2022",
+    "publishedAt": "2023-10-10"
   },
   {
     "id": "stats-sa-electricity",
@@ -30,7 +33,8 @@
     "dataUrl": "https://census.statssa.gov.za/assets/documents/2022/Census_2022_Municipal_factsheet-Web.pdf",
     "datasetUrl": "../assets/data/electricity-lighting-muni.csv",
     "status": "loaded",
-    "detail": "Census municipal fact-sheet values for 2011 and 2022: share of households reporting electricity as their main source for lighting, matched to all 213 municipalities. This is not a measure of grid connection, electricity availability or service reliability."
+    "detail": "Census municipal fact-sheet values for 2011 and 2022: share of households reporting electricity as their main source for lighting, matched to all 213 municipalities. This is not a measure of grid connection, electricity availability or service reliability.",
+    "dataPeriod": "Census 2011 and 2022"
   },
   {
     "id": "stats-sa-service-delivery",
@@ -40,7 +44,8 @@
     "license": "Stats SA requires attribution; reprocessed data may not be sold without prior permission.",
     "dataUrl": "https://www.statssa.gov.za/publications/Report-03-01-83/Report-03-01-832022.pdf",
     "status": "report-only",
-    "detail": "Official Census 2011 and 2022 municipal access measures for improved water, sanitation, weekly refuse removal and electricity. The report also gives the percentage of households reporting water interruptions during the previous 12 months. These are dated household survey measures, not live outage monitoring or a general reliability score."
+    "detail": "Official Census 2011 and 2022 municipal access measures for improved water, sanitation, weekly refuse removal and electricity. The report also gives the percentage of households reporting water interruptions during the previous 12 months. These are dated household survey measures, not live outage monitoring or a general reliability score.",
+    "dataPeriod": "Census 2011 and 2022"
   },
   {
     "id": "stats-sa-gdp-r",
@@ -52,7 +57,8 @@
     "dataUrl": "https://www.statssa.gov.za/publications/P04412/P044122024.pdf",
     "datasetUrl": "../assets/data/provincial-gdp-r.json",
     "status": "loaded",
-    "detail": "P0441.2 provincial gross domestic product, contributions, real growth and industry activity for 2014–2024. Current-price values are nominal R million. This source is province-level; municipal GDP is not inferred."
+    "detail": "P0441.2 provincial gross domestic product, contributions, real growth and industry activity for 2014–2024. Current-price values are nominal R million. This source is province-level; municipal GDP is not inferred.",
+    "dataPeriod": "2014–2024"
   },
   {
     "id": "stats-sa-qlfs",
@@ -62,7 +68,9 @@
     "license": "See original publication",
     "dataUrl": "https://www.statssa.gov.za/publications/P0211/P02113rdQuarter2026.pdf",
     "status": "loaded",
-    "detail": "Official unemployment rate and LU3 estimates for all nine provinces, for Q3 2025, Q2 2026 and Q3 2026. Source: QLFS Q3 2026, Table E, released 10 November 2026. Rates are province-level survey estimates, not municipality-level values."
+    "detail": "Official unemployment rate and LU3 estimates for all nine provinces, for Q3 2025, Q2 2026 and Q3 2026. Source: QLFS Q3 2026, Table E, released 10 November 2026. Rates are province-level survey estimates, not municipality-level values.",
+    "dataPeriod": "Q3 2025, Q2 2026 and Q3 2026",
+    "publishedAt": "2026-11-10"
   },
   {
     "id": "iec-council-2021",
@@ -72,7 +80,9 @@
     "license": "See IEC copyright notice and disclaimer",
     "datasetUrl": "../assets/data/municipal-councillors-2021.json",
     "status": "loaded",
-    "detail": "Historical party seat counts aggregated from the IEC elected-councillor list published 20 November 2021, covering all 213 local and metropolitan municipalities. Ward and PR seats are separate; names and identifiers are not retained. Not current council membership after subsequent changes or the 2026 election."
+    "detail": "Historical party seat counts aggregated from the IEC elected-councillor list published 20 November 2021, covering all 213 local and metropolitan municipalities. Ward and PR seats are separate; names and identifiers are not retained. Not current council membership after subsequent changes or the 2026 election.",
+    "dataPeriod": "2021 municipal election",
+    "publishedAt": "2021-11-20"
   },
   {
     "id": "iec-current-elections",
@@ -81,7 +91,9 @@
     "url": "https://results.elections.org.za/home/Downloads/ME-Results",
     "license": "See IEC copyright notice and disclaimer",
     "status": "portal-only",
-    "detail": "Official 2026 Local Government Elections reports and seat-calculation downloads are available through the IEC results portal. This application does not yet import a verified 2026 municipal seat dataset. IEC results were declared 9 November 2026; a revote was ordered for one Siyancuma voting district on 10 November 2026."
+    "detail": "Official 2026 Local Government Elections reports and seat-calculation downloads are available through the IEC results portal. This application does not yet import a verified 2026 municipal seat dataset. IEC results were declared 9 November 2026; a revote was ordered for one Siyancuma voting district on 10 November 2026.",
+    "dataPeriod": "2026 Local Government Elections",
+    "publishedAt": "2026-11-09"
   },
   {
     "id": "iec-current-ward-councillors",
@@ -100,7 +112,8 @@
     "license": "NASA POWER data access and attribution terms",
     "apiUrl": "https://power.larc.nasa.gov/api/temporal/climatology/point",
     "status": "live-api",
-    "detail": "Monthly mean 2 m temperature and corrected precipitation climatology for the API's reported 25-year period (currently January 2001–December 2025), queried at a representative point within the selected geography. Gridded point values are not municipal area averages or station observations."
+    "detail": "Monthly mean 2 m temperature and corrected precipitation climatology for the API's reported 25-year period (currently January 2001–December 2025), queried at a representative point within the selected geography. Gridded point values are not municipal area averages or station observations.",
+    "dataPeriod": "January 2001–December 2025 climatology"
   },
   {
     "id": "world-bank-wdi",
@@ -132,7 +145,8 @@
     "portalUrl": "https://municipalmoney.gov.za/infrastructure/projects/",
     "apiUrl": "https://municipalmoney.gov.za/api/v1/infrastructure/search",
     "status": "live-api",
-    "detail": "CivicStats loads municipality-filtered named project records from the public API for the published financial years 2017/2018 and 2019/2020 through 2023/2024. FY 2018/2019 is not present in the source catalogue. Source project classifications are not treated as completion status. This is a distinct dataset from Treasury Capital Acquisition (v2)."
+    "detail": "CivicStats loads municipality-filtered named project records from the public API for the published financial years 2017/2018 and 2019/2020 through 2023/2024. FY 2018/2019 is not present in the source catalogue. Source project classifications are not treated as completion status. This is a distinct dataset from Treasury Capital Acquisition (v2).",
+    "dataPeriod": "FY 2017/2018 and FY 2019/2020–2023/2024"
   },
   {
     "id": "agsa",
