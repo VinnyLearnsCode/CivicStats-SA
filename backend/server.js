@@ -1504,7 +1504,9 @@ function sendStaticFile(response, pathname) {
       response.writeHead(200, {
         "content-type": contentType,
         "x-content-type-options": "nosniff",
-        "cache-control": "public, max-age=300"
+        "cache-control": [".html", ".css", ".js"].includes(extname(filename).toLowerCase())
+          ? "no-cache, must-revalidate"
+          : "public, max-age=300"
       });
     })
     .pipe(response);
