@@ -2,8 +2,16 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 
-const migrationId = "001_data_platform";
-const migrationUrl = new URL("./migrations/001_data_platform.sql", import.meta.url);
+const migrations = [
+  {
+    id: "001_data_platform",
+    url: new URL("./migrations/001_data_platform.sql", import.meta.url)
+  },
+  {
+    id: "002_durable_import_queue",
+    url: new URL("./migrations/002_durable_import_queue.sql", import.meta.url)
+  }
+];
 
 export class DataStoreError extends Error {
   constructor(message, { status = 500, code = "DATA_STORE_ERROR" } = {}) {
@@ -163,7 +171,10 @@ export function createDataStore({
 
   return {
     async migrate() {
-      const sql = await readFile(migrationUrl, "utf8");
+      const migrationSql = await Promise.all(migrations.map(async (migration) => ({
+        ...migration,
+        sql: await readFile(migration.url, "utf8")
+      })));
       await withTransaction(async (client) => {
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtext('civicstats-sa-schema-migrations'))"
@@ -174,17 +185,186 @@ export function createDataStore({
              applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
            )`
         );
-        const existing = await client.query(
-          "SELECT migration_id FROM schema_migrations WHERE migration_id = $1",
-          [migrationId]
-        );
-        if (existing.rowCount > 0) return;
-        await client.query(sql);
-        await client.query(
-          "INSERT INTO schema_migrations (migration_id) VALUES ($1)",
-          [migrationId]
-        );
+        for (const migration of migrationSql) {
+          const existing = await client.query(
+            "SELECT migration_id FROM schema_migrations WHERE migration_id = $1",
+            [migration.id]
+          );
+          if (existing.rowCount > 0) continue;
+          await client.query(migration.sql);
+          await client.query(
+            "INSERT INTO schema_migrations (migration_id) VALUES ($1)",
+            [migration.id]
+          );
+        }
       });
+    },
+
+    async enqueueImport(payload) {
+      if (!payload || !/^[A-Z0-9]{1,10}$/.test(payload.municipalityCode ?? "") ||
+        !Number.isInteger(payload.year) || payload.year < 2019 ||
+        payload.year > new Date().getUTCFullYear()) {
+        throw new DataStoreError("Invalid Treasury import request.", {
+          status: 400,
+          code: "INVALID_IMPORT_REQUEST"
+        });
+      }
+      const idempotencyKey = hashValue({ jobType: "treasury", payload });
+      const queueId = randomUUID();
+      const inserted = await pool.query(
+        `INSERT INTO import_queue (queue_id, job_type, idempotency_key, payload)
+         VALUES ($1, 'treasury', $2, $3::jsonb)
+         ON CONFLICT (job_type, idempotency_key)
+           WHERE status IN ('queued', 'processing', 'retrying')
+         DO NOTHING
+         RETURNING queue_id, status, attempt_count, created_at`,
+        [queueId, idempotencyKey, JSON.stringify(payload)]
+      );
+      if (inserted.rowCount > 0) {
+        return { ...inserted.rows[0], duplicate: false };
+      }
+      const existing = await pool.query(
+        `SELECT queue_id, status, attempt_count, created_at
+         FROM import_queue
+         WHERE job_type = 'treasury' AND idempotency_key = $1
+           AND status IN ('queued', 'processing', 'retrying')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [idempotencyKey]
+      );
+      if (existing.rowCount === 0) {
+        throw new DataStoreError("The import queue could not confirm the queued request.");
+      }
+      return { ...existing.rows[0], duplicate: true };
+    },
+
+    async claimQueuedImport(workerId, { leaseMs = 300000 } = {}) {
+      if (typeof workerId !== "string" || !workerId.trim() ||
+        !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3600000) {
+        throw new TypeError("Invalid import worker claim.");
+      }
+      return withTransaction(async (client) => {
+        await client.query(
+          `UPDATE import_queue
+           SET status = 'failed', locked_at = NULL, worker_id = NULL,
+               last_error = COALESCE(last_error, 'Worker lease expired after the final attempt.'),
+               updated_at = now()
+           WHERE status = 'processing' AND attempt_count >= max_attempts
+             AND locked_at < now() - ($1 * interval '1 millisecond')`,
+          [leaseMs]
+        );
+        const available = await client.query(
+          `SELECT queue_id, job_type, payload, attempt_count, max_attempts
+           FROM import_queue
+           WHERE (
+             status IN ('queued', 'retrying') AND available_at <= now()
+           ) OR (
+             status = 'processing' AND attempt_count < max_attempts
+             AND locked_at < now() - ($1 * interval '1 millisecond')
+           )
+           ORDER BY available_at, created_at
+           LIMIT 1
+           FOR UPDATE SKIP LOCKED`,
+          [leaseMs]
+        );
+        const job = available.rows[0];
+        if (!job) return null;
+        const claimed = await client.query(
+          `UPDATE import_queue
+           SET status = 'processing', attempt_count = attempt_count + 1,
+               locked_at = now(), worker_id = $2, updated_at = now()
+           WHERE queue_id = $1
+           RETURNING queue_id, job_type, payload, status, attempt_count, max_attempts`,
+          [job.queue_id, workerId]
+        );
+        return claimed.rows[0];
+      });
+    },
+
+    async completeQueuedImport(queueId, workerId, importId) {
+      const result = await pool.query(
+        `UPDATE import_queue
+         SET status = 'succeeded', result_import_id = $3, locked_at = NULL,
+             worker_id = NULL, last_error = NULL, updated_at = now()
+         WHERE queue_id = $1 AND worker_id = $2 AND status = 'processing'
+         RETURNING queue_id, status, result_import_id`,
+        [queueId, workerId, importId ?? null]
+      );
+      if (result.rowCount === 0) {
+        throw new DataStoreError("The worker no longer owns this queued import.", {
+          status: 409,
+          code: "IMPORT_QUEUE_LEASE_LOST"
+        });
+      }
+      return result.rows[0];
+    },
+
+    async failQueuedImport(queueId, workerId, message) {
+      if (typeof message !== "string" || !message.trim()) {
+        throw new TypeError("A queue failure message is required.");
+      }
+      const current = await pool.query(
+        `SELECT attempt_count, max_attempts
+         FROM import_queue
+         WHERE queue_id = $1 AND worker_id = $2 AND status = 'processing'`,
+        [queueId, workerId]
+      );
+      if (current.rowCount === 0) {
+        throw new DataStoreError("The worker no longer owns this queued import.", {
+          status: 409,
+          code: "IMPORT_QUEUE_LEASE_LOST"
+        });
+      }
+      const { attempt_count: attemptCount, max_attempts: maxAttempts } = current.rows[0];
+      const status = attemptCount >= maxAttempts ? "failed" : "retrying";
+      const retryAt = new Date(Date.now() + Math.min(300000, 1000 * (2 ** (attemptCount - 1))));
+      const result = await pool.query(
+        `UPDATE import_queue
+         SET status = $3, available_at = CASE WHEN $3 = 'retrying' THEN $4 ELSE available_at END,
+             locked_at = NULL, worker_id = NULL, last_error = $5, updated_at = now()
+         WHERE queue_id = $1 AND worker_id = $2 AND status = 'processing'
+         RETURNING queue_id, status, attempt_count, max_attempts, available_at`,
+        [queueId, workerId, status, retryAt, message.slice(0, 1000)]
+      );
+      if (result.rowCount === 0) {
+        throw new DataStoreError("The worker no longer owns this queued import.", {
+          status: 409,
+          code: "IMPORT_QUEUE_LEASE_LOST"
+        });
+      }
+      return result.rows[0];
+    },
+
+    async getQueuedImport(queueId) {
+      const result = await pool.query(
+        `SELECT queue_id, job_type, status, attempt_count, max_attempts,
+                result_import_id, last_error, available_at, created_at, updated_at
+         FROM import_queue
+         WHERE queue_id = $1`,
+        [queueId]
+      );
+      if (result.rowCount === 0) {
+        throw new DataStoreError("Queued import was not found.", {
+          status: 404,
+          code: "IMPORT_QUEUE_NOT_FOUND"
+        });
+      }
+      return result.rows[0];
+    },
+
+    async listQueuedImports(limit = 20) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        throw new TypeError("Import queue limit must be from 1 through 100.");
+      }
+      const result = await pool.query(
+        `SELECT queue_id, job_type, status, attempt_count, max_attempts,
+                result_import_id, last_error, available_at, created_at, updated_at
+         FROM import_queue
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      return result.rows;
     },
 
     async persistImport(input) {

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { createAppServer } from "../backend/server.js";
+import {
+  createAppServer,
+  createTreasuryImportProcessor
+} from "../backend/server.js";
+import { processQueuedImportOnce } from "../backend/worker.js";
 
 let server;
 let baseUrl;
@@ -587,7 +591,7 @@ test("administrative endpoints rate limit repeated attempts", async () => {
   }
 });
 
-test("Treasury imports validate source records and leave them awaiting administrator review", async () => {
+test("Treasury imports are queued durably and worker results remain awaiting administrator review", async () => {
   const adminToken = "civicstats-test-admin-token-0123456789";
   const treasuryMunicipality = {
     "municipality.demarcation_code": "LIM367",
@@ -603,8 +607,30 @@ test("Treasury imports validate source records and leave them awaiting administr
     "amount.sum": 123456
   };
   let persistedInput;
+  let queuedPayload;
+  let completedQueueImport;
   let approvalId;
+  const queueId = "2e9e9abf-3954-4a44-910e-4559a4c380ee";
   const dataStore = {
+    async enqueueImport(payload) {
+      queuedPayload = payload;
+      return { queue_id: queueId, status: "queued", attempt_count: 0, duplicate: false };
+    },
+    async claimQueuedImport(workerId) {
+      assert.equal(workerId, "test-worker");
+      return {
+        queue_id: queueId,
+        payload: queuedPayload,
+        attempt_count: 1,
+        max_attempts: 3
+      };
+    },
+    async completeQueuedImport(importQueueId, workerId, importId) {
+      completedQueueImport = { importQueueId, workerId, importId };
+    },
+    async failQueuedImport() {
+      throw new Error("The test import should not fail.");
+    },
     async persistImport(input) {
       persistedInput = input;
       return {
@@ -615,6 +641,14 @@ test("Treasury imports validate source records and leave them awaiting administr
         records_rejected: 0,
         duplicate: false
       };
+    },
+    async listQueuedImports(limit) {
+      assert.equal(limit, 5);
+      return [{ queue_id: queueId, status: "succeeded" }];
+    },
+    async getQueuedImport(importQueueId) {
+      assert.equal(importQueueId, queueId);
+      return { queue_id: queueId, status: "succeeded" };
     },
     async logFailedImport() {},
     async listImports(limit) {
@@ -684,8 +718,23 @@ test("Treasury imports validate source records and leave them awaiting administr
       },
       body: JSON.stringify({ municipalityCode: "LIM367", year: 2024 })
     });
-    assert.equal(trigger.status, 201);
-    assert.equal((await trigger.json()).status, "awaiting_review");
+    assert.equal(trigger.status, 202);
+    const queued = await trigger.json();
+    assert.equal(queued.status, "queued");
+    assert.equal(queued.queue_id, queueId);
+    assert.deepEqual(queuedPayload, { municipalityCode: "LIM367", year: 2024 });
+
+    const processor = await createTreasuryImportProcessor({ fetchImpl: fakeFetch, dataStore });
+    assert.equal(await processQueuedImportOnce({
+      dataStore,
+      processImport: processor,
+      workerId: "test-worker"
+    }), true);
+    assert.deepEqual(completedQueueImport, {
+      importQueueId: queueId,
+      workerId: "test-worker",
+      importId: 17
+    });
     assert.equal(persistedInput.datasetId, "national-treasury-municipal-finance");
     assert.equal(persistedInput.municipalityCode, "LIM367");
     assert.equal(persistedInput.sourceCode, "LIM367");
@@ -700,6 +749,18 @@ test("Treasury imports validate source records and leave them awaiting administr
     });
     assert.equal(imports.status, 200);
     assert.equal((await imports.json()).imports[0].import_id, 17);
+
+    const queue = await fetch(`${url}/api/admin/import-queue?limit=5`, {
+      headers: { authorization: ["Bearer", adminToken].join(" ") }
+    });
+    assert.equal(queue.status, 200);
+    assert.equal((await queue.json()).jobs[0].queue_id, queueId);
+
+    const queueStatus = await fetch(`${url}/api/admin/import-queue/${queueId}`, {
+      headers: { authorization: ["Bearer", adminToken].join(" ") }
+    });
+    assert.equal(queueStatus.status, 200);
+    assert.equal((await queueStatus.json()).job.status, "succeeded");
 
     const detail = await fetch(`${url}/api/admin/imports/17?limit=10&offset=0`, {
       headers: { authorization: `Bearer ${adminToken}` }
@@ -768,6 +829,44 @@ test("central Treasury API exposes only published records from the data store", 
       dataServer.close((error) => error ? reject(error) : resolve())
     );
   }
+});
+
+test("background worker records failed attempts for durable retry", async () => {
+  const queueId = "2e9e9abf-3954-4a44-910e-4559a4c380ee";
+  let failure;
+  const dataStore = {
+    async claimQueuedImport(workerId) {
+      assert.equal(workerId, "retry-worker");
+      return {
+        queue_id: queueId,
+        payload: { municipalityCode: "LIM367", year: 2024 },
+        attempt_count: 1,
+        max_attempts: 3
+      };
+    },
+    async failQueuedImport(importQueueId, workerId, message) {
+      failure = { importQueueId, workerId, message };
+      return {
+        queue_id: importQueueId,
+        status: "retrying",
+        attempt_count: 1,
+        max_attempts: 3
+      };
+    },
+    async completeQueuedImport() {
+      throw new Error("Failed jobs must not be completed.");
+    }
+  };
+  assert.equal(await processQueuedImportOnce({
+    dataStore,
+    processImport: async () => { throw new Error("Treasury is temporarily unavailable."); },
+    workerId: "retry-worker"
+  }), true);
+  assert.deepEqual(failure, {
+    importQueueId: queueId,
+    workerId: "retry-worker",
+    message: "Treasury is temporarily unavailable."
+  });
 });
 
 test("capital acquisition rejects invalid years and non-municipality references", async () => {

@@ -1035,6 +1035,50 @@ function buildTreasuryImport(municipality, year, facts) {
   return input;
 }
 
+export async function createTreasuryImportProcessor({
+  fetchImpl = globalThis.fetch,
+  dataStore
+} = {}) {
+  if (!dataStore ||
+    typeof dataStore.persistImport !== "function" ||
+    typeof dataStore.logFailedImport !== "function") {
+    throw new TypeError("A persistent data store is required for Treasury imports.");
+  }
+  const [boundaries, censusMunicipalities] = await Promise.all([
+    loadBoundaries(),
+    loadCensusMunicipalities()
+  ]);
+  const municipalities = boundaries.get("ADM3").features.map((feature) =>
+    safeMunicipality(feature, boundaries, censusMunicipalities)
+  );
+  const providerClient = createProviderClient(fetchImpl);
+
+  return async function processTreasuryImport(payload, job) {
+    const municipality = municipalities.find((item) =>
+      item.level === "ADM3" && item.officialCode === payload?.municipalityCode
+    );
+    const year = payload?.year;
+    if (!municipality || !Number.isInteger(year) ||
+      year < 2019 || year > new Date().getUTCFullYear()) {
+      throw new TypeError("The queued Treasury import request is invalid.");
+    }
+
+    let facts;
+    try {
+      facts = await loadTreasuryFacts(providerClient, municipality, year);
+    } catch (error) {
+      if (job?.attempt_count >= job?.max_attempts) {
+        await dataStore.logFailedImport(
+          treasuryImportMetadata(municipality, year),
+          providerErrorMessage(error)
+        );
+      }
+      throw error;
+    }
+    return dataStore.persistImport(buildTreasuryImport(municipality, year, facts));
+  };
+}
+
 async function loadNasaPowerClimatology(providerClient, feature) {
   const coordinates = representativePoint(feature);
   if (!coordinates) throw new Error("No representative point could be calculated for this boundary.");
@@ -1523,44 +1567,20 @@ export async function createAppServer({
           return;
         }
 
-        let facts;
         try {
-          facts = await loadTreasuryFacts(providerClient, municipality, year);
-        } catch (error) {
-          try {
-            await dataStore.logFailedImport(
-              treasuryImportMetadata(municipality, year),
-              providerErrorMessage(error)
-            );
-          } catch (loggingError) {
-            console.error("Treasury import and failure logging both failed.", providerErrorMessage(loggingError));
-            jsonResponse(response, 500, {
-              error: "The Treasury import failed and its failure could not be logged.",
-              code: "IMPORT_LOG_FAILED"
-            });
-            return;
-          }
-          console.error("Treasury data import failed.", providerErrorMessage(error));
-          jsonResponse(response, 502, {
-            error: "National Treasury could not provide the requested import.",
-            code: "PROVIDER_UNAVAILABLE"
+          const result = await dataStore.enqueueImport({ municipalityCode, year });
+          jsonResponse(response, 202, {
+            ...result,
+            status: result.status,
+            message: result.duplicate
+              ? "An equivalent Treasury import is already queued or processing."
+              : "Treasury import queued for background processing."
           });
-          return;
-        }
-
-        try {
-          const result = await dataStore.persistImport(buildTreasuryImport(municipality, year, facts));
-          const status = result.duplicate
-            ? 200
-            : result.status === "awaiting_review"
-              ? 201
-              : 422;
-          jsonResponse(response, status, result);
         } catch (error) {
-          console.error("Treasury import could not be stored.", providerErrorMessage(error));
-          jsonResponse(response, 500, {
-            error: "The Treasury import could not be stored.",
-            code: "IMPORT_STORAGE_FAILED"
+          console.error("Treasury import could not be queued.", providerErrorMessage(error));
+          jsonResponse(response, 503, {
+            error: "The Treasury import could not be added to the durable queue.",
+            code: "IMPORT_QUEUE_UNAVAILABLE"
           });
         }
       })();
@@ -1633,6 +1653,63 @@ export async function createAppServer({
         jsonResponse(response, 503, {
           error: "Import history is unavailable.",
           code: "IMPORT_HISTORY_UNAVAILABLE"
+        });
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/admin/import-queue") {
+      if (!requireAdmin(request, response, adminToken, adminRequests)) return;
+      if (!dataStore) {
+        jsonResponse(response, 503, {
+          error: "Persistent data storage is not configured.",
+          code: "DATA_STORE_NOT_CONFIGURED"
+        });
+        return;
+      }
+      const limit = Number(url.searchParams.get("limit") ?? "20");
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        jsonResponse(response, 400, {
+          error: "limit must be an integer from 1 through 100.",
+          code: "INVALID_LIMIT"
+        });
+        return;
+      }
+      void dataStore.listQueuedImports(limit).then((jobs) => {
+        jsonResponse(response, 200, { jobs });
+      }).catch((error) => {
+        console.error("Import queue lookup failed.", providerErrorMessage(error));
+        jsonResponse(response, 503, {
+          error: "The import queue is unavailable.",
+          code: "IMPORT_QUEUE_UNAVAILABLE"
+        });
+      });
+      return;
+    }
+
+    const queuedImportMatch = url.pathname.match(
+      /^\/api\/admin\/import-queue\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i
+    );
+    if (queuedImportMatch) {
+      if (!requireAdmin(request, response, adminToken, adminRequests)) return;
+      if (!dataStore) {
+        jsonResponse(response, 503, {
+          error: "Persistent data storage is not configured.",
+          code: "DATA_STORE_NOT_CONFIGURED"
+        });
+        return;
+      }
+      void dataStore.getQueuedImport(queuedImportMatch[1]).then((job) => {
+        jsonResponse(response, 200, { job });
+      }).catch((error) => {
+        if (error instanceof DataStoreError) {
+          jsonResponse(response, error.status, { error: error.message, code: error.code });
+          return;
+        }
+        console.error("Import queue status lookup failed.", providerErrorMessage(error));
+        jsonResponse(response, 503, {
+          error: "Import queue status is unavailable.",
+          code: "IMPORT_QUEUE_UNAVAILABLE"
         });
       });
       return;
