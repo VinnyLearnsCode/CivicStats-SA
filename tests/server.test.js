@@ -944,7 +944,7 @@ test("named project API returns bounded, sanitized source records and rejects un
           ward_location: "Ward 4",
           financial_year: "2023/2024",
           geography: { contact: "private@example.test", address: "private address" },
-          expenditure: [{ amount: "1200.50", financial_year: "2023/2024", budget_phase: { name: "Adjusted Budget" } }]
+          expenditure: [{ amount: "1200.50", financial_year: { budget_year: "2023/2024" }, budget_phase: { name: "Adjusted Budget" } }]
         }] }
       });
     }

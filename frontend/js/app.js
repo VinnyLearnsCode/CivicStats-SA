@@ -2728,34 +2728,46 @@ function renderNamedProjectRecords(parent, result) {
     `Municipal Money source records for FY ${result.financialYear}. The source provides selected years from FY 2017/2018 through FY 2023/2024; FY 2018/2019 is absent from its published catalogue. Project type is not a completion status.`);
   const note = document.createElement("p");
   note.className = "finance-source-note";
-  note.textContent = `${Number(result.totalRecords).toLocaleString("en-ZA")} source records${result.truncated ? `; showing the first ${result.projects.length.toLocaleString("en-ZA")} records` : ""}. Checked ${new Date(result.checkedAt).toLocaleString("en-ZA")}.`;
+  let displayed = 0;
+  note.textContent = `Showing ${Math.min(50, result.projects.length).toLocaleString("en-ZA")} of ${Number(result.totalRecords).toLocaleString("en-ZA")} source records${result.truncated ? ` (source retrieval capped at ${result.projects.length.toLocaleString("en-ZA")})` : ""}. Checked ${new Date(result.checkedAt).toLocaleString("en-ZA")}.`;
   section.append(note);
   if (!result.projects.length) {
     addDetailMessage(section, "No records returned", "The source returned no named-project records for this municipality and reporting year. This is not evidence that the municipality had no projects.");
   } else {
-    result.projects.forEach((project) => {
-      const article = document.createElement("article");
-      article.className = "audit-opinion document-record";
-      const title = document.createElement("strong");
-      title.textContent = project.name;
-      article.append(title);
-      const details = document.createElement("p");
-      details.className = "finance-source-note";
-      details.textContent = [
-        project.projectNumber && `Project ${project.projectNumber}`,
-        project.type && `Type: ${project.type}`,
-        project.function && `Function: ${project.function}`,
-        project.ward && `Ward: ${project.ward}`
-      ].filter(Boolean).join(" · ") || "No additional project details supplied.";
-      article.append(details);
-      project.expenditure.forEach((item) => {
-        const amount = document.createElement("p");
-        amount.className = "finance-source-note";
-        amount.textContent = `${item.financialYear || result.financialYear} · ${item.budgetPhase}: R ${item.amount.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}`;
-        article.append(amount);
+    const appendProjects = (to) => {
+      result.projects.slice(displayed, to).forEach((project) => {
+        const article = document.createElement("article");
+        article.className = "audit-opinion document-record";
+        const title = document.createElement("strong");
+        title.textContent = project.name;
+        article.append(title);
+        const details = document.createElement("p");
+        details.className = "finance-source-note";
+        details.textContent = [project.projectNumber && `Project ${project.projectNumber}`, project.type && `Type: ${project.type}`, project.function && `Function: ${project.function}`, project.ward && `Ward: ${project.ward}`].filter(Boolean).join(" · ") || "No additional project details supplied.";
+        article.append(details);
+        project.expenditure.forEach((item) => {
+          const amount = document.createElement("p");
+          amount.className = "finance-source-note";
+          amount.textContent = `${item.financialYear || result.financialYear} · ${item.budgetPhase}: R ${item.amount.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}`;
+          article.append(amount);
+        });
+        section.append(article);
       });
-      section.append(article);
-    });
+      displayed = to;
+    };
+    appendProjects(Math.min(50, result.projects.length));
+    if (displayed < result.projects.length) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "section-tab";
+      more.textContent = "Load next 50 projects";
+      more.addEventListener("click", () => {
+        appendProjects(Math.min(displayed + 50, result.projects.length));
+        note.textContent = `Showing ${displayed.toLocaleString("en-ZA")} of ${Number(result.totalRecords).toLocaleString("en-ZA")} source records${result.truncated ? ` (source retrieval capped at ${result.projects.length.toLocaleString("en-ZA")})` : ""}. Checked ${new Date(result.checkedAt).toLocaleString("en-ZA")}.`;
+        if (displayed >= result.projects.length) more.remove();
+      });
+      section.append(more);
+    }
   }
   addSourceLink(section, result.source.url, "Open source municipal project register ↗");
 }

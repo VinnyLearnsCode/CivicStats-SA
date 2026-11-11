@@ -1266,7 +1266,7 @@ function normalizeNamedProject(record) {
     financialYear: record.financial_year == null ? null : String(record.financial_year),
     expenditure: expenditure.filter((entry) => entry && Number.isFinite(Number(entry.amount))).map((entry) => ({
       amount: Number(entry.amount),
-      financialYear: String(entry.financial_year ?? ""),
+      financialYear: String(entry.financial_year?.budget_year ?? entry.financial_year ?? ""),
       budgetPhase: String(entry.budget_phase?.name ?? entry.budget_phase ?? "Not specified")
     }))
   };
