@@ -4397,6 +4397,7 @@ async function loadCensusMapData(year) {
     state.censusMapLoading = false;
     refreshMapStyles();
     renderNationalMetrics();
+    renderNationalHighlights();
     if (state.view === "municipalities") renderAlternateView();
   } catch (error) {
     if (requestId !== state.censusMapRequestId) return;
@@ -4406,6 +4407,7 @@ async function loadCensusMapData(year) {
     if (["population", "growth", "water", "electricity"].includes(state.mapLayer)) state.mapLayer = "boundaries";
     refreshMapStyles();
     renderNationalMetrics();
+    renderNationalHighlights();
     if (state.view === "municipalities") renderAlternateView();
   }
 }
@@ -4691,33 +4693,62 @@ function resetMapToNational() {
 function renderNationalHighlights() {
   const grid = document.querySelector("#focus-grid");
   if (!grid) return;
-  const gdpRecords = state.provincialEconomyData?.records ?? [];
   const unemploymentRecords = [...state.labourMapRecords.values()];
+  const censusRecords = [];
+  if (state.censusMapRecords.size === state.municipalities.length && state.municipalities.length > 0) {
+    const byProvince = new Map();
+    state.municipalities.forEach((municipality) => {
+      const record = state.censusMapRecords.get(municipality.id);
+      if (!record || !Number.isFinite(record.households) || record.households <= 0 ||
+        !Number.isFinite(record.waterSchemeHouseholds) ||
+        !Number.isFinite(record.electricityLightingSharePercent)) return;
+      const group = byProvince.get(municipality.provinceId) ?? {
+        province: municipality.province,
+        households: 0,
+        waterSchemeHouseholds: 0,
+        electricityLightingHouseholds: 0
+      };
+      group.households += record.households;
+      group.waterSchemeHouseholds += record.waterSchemeHouseholds;
+      group.electricityLightingHouseholds += record.electricityLightingSharePercent * record.households / 100;
+      byProvince.set(municipality.provinceId, group);
+    });
+    for (const group of byProvince.values()) {
+      if (group.households <= 0) continue;
+      censusRecords.push({
+        province: group.province,
+        waterSchemeSharePercent: group.waterSchemeHouseholds / group.households * 100,
+        electricityLightingSharePercent: group.electricityLightingHouseholds / group.households * 100
+      });
+    }
+    const expectedProvinceCount = state.geographies.filter((geography) => geography.level === "ADM1").length;
+    if (!expectedProvinceCount || censusRecords.length !== expectedProvinceCount) censusRecords.length = 0;
+  }
   const highlights = [
-    {
-      label: "Largest share of national GDP",
-      record: gdpRecords.length ? [...gdpRecords].sort((a, b) => b.gdpContributionPercent - a.gdpContributionPercent)[0] : null,
-      value: (record) => `${formatCensusNumber(record.gdpContributionPercent, 1)}%`,
-      note: state.provincialEconomyData ? `Stats SA GDP-R · ${state.provincialEconomyData.year}` : "Stats SA GDP-R · loading"
-    },
-    {
-      label: "Fastest real GDP growth",
-      record: gdpRecords.length ? [...gdpRecords].sort((a, b) => b.realGdpGrowthPercent - a.realGdpGrowthPercent)[0] : null,
-      value: (record) => `${formatCensusNumber(record.realGdpGrowthPercent, 1)}%`,
-      note: state.provincialEconomyData ? `Inflation-adjusted · ${state.provincialEconomyData.year}` : "Stats SA GDP-R · loading"
-    },
     {
       label: "Highest official unemployment",
       record: unemploymentRecords.length ? [...unemploymentRecords].sort((a, b) => b.officialRate - a.officialRate)[0] : null,
       value: (record) => `${formatCensusNumber(record.officialRate, 1)}%`,
       note: state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? "Stats SA QLFS · loading"
+    },
+    {
+      label: "Highest water-scheme access",
+      record: censusRecords.length ? [...censusRecords].sort((a, b) => b.waterSchemeSharePercent - a.waterSchemeSharePercent)[0] : null,
+      value: (record) => `${formatCensusNumber(record.waterSchemeSharePercent, 1)}% of households`,
+      note: `Stats SA Census ${state.censusMapYear} · municipal household reports`
+    },
+    {
+      label: "Highest share using electricity as main lighting",
+      record: censusRecords.length ? [...censusRecords].sort((a, b) => b.electricityLightingSharePercent - a.electricityLightingSharePercent)[0] : null,
+      value: (record) => `${formatCensusNumber(record.electricityLightingSharePercent, 1)}% of households`,
+      note: `Stats SA Census ${state.censusMapYear} · municipal household reports`
     }
   ];
   grid.innerHTML = highlights.map((highlight) => {
     const record = highlight.record;
     const name = record?.province ?? (highlight.label === "Highest official unemployment"
       ? state.labourMapLoading ? "Loading…" : "Unavailable"
-      : state.economyMapLoading ? "Loading…" : "Unavailable");
+      : state.censusMapLoading ? "Loading…" : "Unavailable");
     return `<button class="focus-card" type="button" data-highlight-province="${escapeHtml(record?.province ?? "")}" ${record ? "" : "disabled"}>
       <span class="ops-label">${escapeHtml(highlight.label)}</span>
       <h3>${escapeHtml(name)}</h3>
