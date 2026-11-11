@@ -42,7 +42,7 @@ a { color: inherit; }
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
-  z-index: 20;
+  z-index: 1200;
   display: flex;
   width: 224px;
   flex-direction: column;
@@ -479,7 +479,7 @@ a { color: inherit; }
 @media (max-width: 640px) {
   .sidebar { width: 258px; transform: translateX(-100%); box-shadow: 12px 0 35px #0005; }
   .mobile-nav-open .sidebar { transform: translateX(0); }
-  .mobile-scrim:not([hidden]) { position: fixed; inset: 0; z-index: 15; display: block; background: #0008; }
+  .mobile-scrim:not([hidden]) { position: fixed; inset: 0; z-index: 1100; display: block; background: #0008; }
   .main-shell, .sidebar-collapsed .main-shell { width: 100%; margin-left: 0; }
   .topbar { height: 49px; padding: 0 12px; }
   .mobile-menu { display: inline-grid; width: 28px; height: 28px; margin-right: 9px; place-items: center; border: 1px solid var(--border); background: transparent; color: #b6c1bb; cursor: pointer; font-size: 13px; }
