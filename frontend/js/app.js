@@ -3359,8 +3359,13 @@ function updateProfile(selected) {
   document.querySelector("#profile-code").textContent = selected.officialCode ??
     state.censusMapRecords.get(selected.id)?.censusCode ?? "Data unavailable";
   document.querySelector("#profile-boundary-id").textContent = selected.id || "—";
+  const levelLabels = { ADM1: "PROVINCE", ADM2: "DISTRICT / METRO", ADM3: "MUNICIPALITY" };
+  const levelLabel = levelLabels[selected.level] ?? formatBoundaryLevel(selected.level).toUpperCase();
+  document.querySelector("#profile-scope-label").textContent = `SELECTED ${levelLabel}`;
   document.querySelector("#profile-type").textContent =
-    (selected.category ?? formatBoundaryLevel(selected.level)).toUpperCase();
+    (selected.category ?? levelLabel).toUpperCase();
+  document.querySelector("#profile-population-label").textContent =
+    `POPULATION · ${levelLabel} · CENSUS 2022`;
   document.querySelector("#profile-area").textContent = formatArea(selected.areaKm2);
   document.querySelector("#profile-area-note").textContent = selected.areaKm2 == null
     ? "Not calculated for this boundary"
@@ -3425,7 +3430,9 @@ function clearGeographySelection() {
   state.profileSummaryRequestId += 1;
   profileName.textContent = "South Africa";
   profileLocation.textContent = "Select a province, district or municipality";
-  document.querySelector("#profile-type").textContent = "NATIONAL OVERVIEW";
+  document.querySelector("#profile-scope-label").textContent = "NATIONAL OVERVIEW";
+  document.querySelector("#profile-type").textContent = "Select a place";
+  document.querySelector("#profile-population-label").textContent = "POPULATION · CENSUS 2022";
   document.querySelector("#profile-code").textContent = "Data unavailable";
   document.querySelector("#profile-boundary-id").textContent = "—";
   document.querySelector("#profile-area").textContent = "Data unavailable";
@@ -3564,12 +3571,17 @@ async function updateProfileSummary(selected) {
   );
   if (labourRecord && period) {
     unemployment.textContent = `${formatCensusNumber(labourRecord.officialRate, 1)}%`;
-    unemploymentNote.textContent = `${province} · ${period.label} · province-level, not a municipal rate`;
+    const selectedLevelLabel = selected.level === "ADM1"
+      ? "provincial rate"
+      : selected.level === "ADM2"
+        ? "province-level estimate · not a district rate"
+        : "province-level estimate · not a municipal rate";
+    unemploymentNote.textContent = `${province} · ${period.label} · ${selectedLevelLabel}`;
     verifiedIndicators += 1;
   } else {
     unemployment.textContent = province ? "Unavailable" : "Province required";
     unemploymentNote.textContent = labour
-      ? "Stats SA QLFS reports unemployment at province level only"
+      ? `Stats SA QLFS reports ${province ? `a ${province} provincial estimate` : "unemployment"} only; no municipality or district rate is available`
       : `Provincial QLFS unavailable${state.labourMapError ? `: ${state.labourMapError}` : ""}`;
   }
 
