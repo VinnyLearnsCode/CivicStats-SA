@@ -3354,6 +3354,7 @@ function updateProfile(selected) {
       layer.setStyle(isSelected ? selectedStyle() : mapStyle(layer.feature));
       if (isSelected && state.boundaryLevel !== "ADM1") layer.bringToFront();
     });
+    refreshSelectionLayer();
     updateMapRegionAccessibility();
   }
 }

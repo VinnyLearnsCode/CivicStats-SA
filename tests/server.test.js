@@ -438,6 +438,11 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(applicationScript, /renderIndicatorGuide/);
   assert.match(applicationScript, /Provincial economy & labour/);
   assert.match(applicationScript, /function renderMapDataTable/);
+  const profileSelectionSource = applicationScript.slice(
+    applicationScript.indexOf("function updateProfile(selected)"),
+    applicationScript.indexOf("function renderGeographyChildren(selected)")
+  );
+  assert.match(profileSelectionSource, /refreshSelectionLayer\(\)/);
   assert.match(applicationScript, /Band 1 is lowest and Band 5 is highest/);
   assert.match(applicationScript, /Band \$\{index \+ 1\}/);
   assert.match(applicationScript, /function handleMapRegionKeydown/);
