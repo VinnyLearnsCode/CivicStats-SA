@@ -203,6 +203,7 @@ const searchClear = document.querySelector("#clear-search");
 const sectionTabs = document.querySelector("#section-tabs");
 const workspaceGrid = document.querySelector("#workspace-grid");
 const alternateView = document.querySelector("#alternate-view");
+const comparisonWorkspace = document.querySelector("#comparison-workspace");
 
 async function getJson(url) {
   if (staticDeployment) return getStaticApiResponse(url);
@@ -945,18 +946,26 @@ function updateNavigation() {
 
 function setView(view) {
   state.view = viewCopy[view] ? view : "dashboard";
-  const workspace = ["dashboard", "national", "workspace"].includes(state.view);
+  const comparisonMode = state.view === "comparisons";
+  const workspace = ["dashboard", "national", "workspace", "comparisons"].includes(state.view);
   setMobileProfileOpen(false);
+  if (comparisonMode) {
+    document.querySelector("#center-column").append(comparisonWorkspace);
+  } else if (comparisonWorkspace.parentElement !== document.querySelector("#center-column")) {
+    document.querySelector("#center-column").append(comparisonWorkspace);
+  }
   workspaceGrid.hidden = !workspace;
-  workspaceGrid.classList.toggle("section-detail-active", workspace && state.tab !== "overview");
-  workspaceGrid.classList.toggle("map-compact", workspace && state.tab !== "overview");
-  document.querySelector("#map-compact-toggle").hidden = !(workspace && state.tab !== "overview");
-  sectionTabs.hidden = !workspace;
+  workspaceGrid.classList.toggle("comparison-active", comparisonMode);
+  workspaceGrid.classList.toggle("section-detail-active", workspace && !comparisonMode && state.tab !== "overview");
+  workspaceGrid.classList.toggle("map-compact", comparisonMode || (workspace && state.tab !== "overview"));
+  document.querySelector("#map-compact-toggle").hidden = !(workspace && (comparisonMode || state.tab !== "overview"));
+  sectionTabs.hidden = !workspace || comparisonMode;
   alternateView.hidden = workspace;
+  comparisonWorkspace.hidden = !comparisonMode;
   updatePageHeading();
   updateBreadcrumb();
   updateNavigation();
-  if (!workspace) renderAlternateView();
+  if (comparisonMode || !workspace) renderAlternateView();
 }
 
 async function copyShareableViewLink() {
@@ -998,11 +1007,13 @@ function setTab(tab) {
   state.tab = tab;
   state.view = "dashboard";
   workspaceGrid.hidden = false;
+  workspaceGrid.classList.remove("comparison-active");
   workspaceGrid.classList.toggle("section-detail-active", tab !== "overview");
   workspaceGrid.classList.toggle("map-compact", tab !== "overview");
   document.querySelector("#map-compact-toggle").hidden = tab === "overview";
   sectionTabs.hidden = false;
   alternateView.hidden = true;
+  comparisonWorkspace.hidden = true;
   renderDetail();
   updatePageHeading();
   updateBreadcrumb();
@@ -5270,6 +5281,7 @@ function renderComparison() {
 
 function renderAlternateView() {
   const [title, subtitle] = viewCopy[state.view] ?? viewCopy.dashboard;
+  const viewRoot = state.view === "comparisons" ? comparisonWorkspace : alternateView;
   let content = "";
   if (state.view === "municipalities") {
     content = renderMunicipalityTable();
@@ -5279,7 +5291,7 @@ function renderAlternateView() {
       : state.integrations.length
         ? `<p class="source-check-note">Provider status checked ${escapeHtml(new Date(state.integrations[0].checkedAt).toLocaleString("en-ZA"))}. A portal-only label means no public structured API has been verified.</p>`
         : `<p class="source-check-note">Checking live provider connections…</p>`;
-    content = `${connectionNote}${renderSourceCards()}${renderCitiesNetworkPublications()}`;
+    content = `${connectionNote}${renderSourceCoverageSummary()}${renderSourceCards()}${renderCitiesNetworkPublications()}`;
   } else if (state.view === "comparisons") {
     content = renderComparison();
   } else if (state.view === "reports") {
@@ -5291,21 +5303,21 @@ function renderAlternateView() {
   } else {
     content = `<div class="view-empty"><div class="notice-symbol">!</div><h3>Not available in this prototype</h3><p>${escapeHtml(subtitle)}. No unsupported or unverified content is displayed. Use the map, municipality directory or source catalogue to explore the currently loaded data.</p></div>`;
   }
-  alternateView.innerHTML = `
+  viewRoot.innerHTML = `
     <header class="alternate-heading">
       <div><span class="panel-kicker">CIVICSTATS SA · ${escapeHtml(state.view.toUpperCase())}</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p></div>
       <div class="view-actions">${state.view === "municipalities" ? '<button class="action-button" id="export-municipalities">Download boundary directory</button>' : ""}</div>
     </header>${content}`;
 
-  alternateView.querySelectorAll("[data-select-id]").forEach((button) => {
+  viewRoot.querySelectorAll("[data-select-id]").forEach((button) => {
     button.addEventListener("click", () => {
       const item = state.municipalities.find((municipality) => municipality.id === button.dataset.selectId);
       if (item) void selectMunicipality(item);
     });
   });
-  const exportButton = document.querySelector("#export-municipalities");
+  const exportButton = viewRoot.querySelector("#export-municipalities");
   if (exportButton) exportButton.addEventListener("click", exportMunicipalityDirectory);
-  alternateView.querySelectorAll("[data-retry-publications], [data-retry-integrations]").forEach((button) => {
+  viewRoot.querySelectorAll("[data-retry-publications], [data-retry-integrations]").forEach((button) => {
     button.addEventListener("click", () => {
       button.disabled = true;
       button.textContent = "Retrying…";
@@ -5318,11 +5330,23 @@ function renderAlternateView() {
       void loadLiveSourceData();
     });
   });
-  if (state.view === "comparisons") initializeComparison();
+  if (state.view === "comparisons") initializeComparison(viewRoot);
 }
 
-function initializeComparison() {
-  const selects = [...alternateView.querySelectorAll(".compare-select")];
+function renderSourceCoverageSummary() {
+  return `<section class="source-coverage-summary" aria-label="Data coverage and interpretation">
+    <div><span class="panel-kicker">COVERAGE &amp; LIMITS</span><h3>Know what each dataset can tell you</h3></div>
+    <div class="source-coverage-grid">
+      <article><strong>Municipal Census</strong><p>Population and selected household indicators cover 213 municipalities for Census 2011 and 2022. Service responses describe reported access at census time.</p></article>
+      <article><strong>Province-level estimates</strong><p>Stats SA QLFS unemployment and GDP-R cover all nine provinces. They are not municipality estimates and must not be averaged into a national rate without the right source weights.</p></article>
+      <article><strong>Live and dated sources</strong><p>Treasury finance, audit and project records, NASA POWER climate data, World Bank indicators and publication feeds show their own periods and source coverage.</p></article>
+      <article><strong>Score limits</strong><p>The basic-services CivicScore is a municipality-only Census 2022 pilot. It is not a complete measure of council performance and has no national score.</p></article>
+    </div>
+  </section>`;
+}
+
+function initializeComparison(root) {
+  const selects = [...root.querySelectorAll(".compare-select")];
   if (state.comparisonSelections.length) {
     state.comparisonSelections.slice(0, selects.length).forEach((id, index) => {
       selects[index].value = id;
@@ -5330,8 +5354,8 @@ function initializeComparison() {
   } else if (state.selected?.level === "ADM3" && selects[0]) {
     selects[0].value = state.selected.id;
   }
-  const exportButton = alternateView.querySelector("#compare-export");
-  const shareButton = alternateView.querySelector("#compare-share");
+  const exportButton = root.querySelector("#compare-export");
+  const shareButton = root.querySelector("#compare-share");
   const update = () => {
     const requestId = ++state.comparisonRequestId;
     const selectedIds = selects.map((select) => select.value).filter(Boolean);
@@ -5341,8 +5365,8 @@ function initializeComparison() {
     selects.forEach((select, index) => {
       const item = state.municipalities.find((municipality) => municipality.id === select.value);
       const heading = item?.name ?? `Geography ${index + 1}`;
-      alternateView.querySelector(`[data-compare-heading="${index}"]`).textContent = heading;
-      alternateView.querySelector(`[data-indicator-heading="${index}"]`).textContent = heading;
+      root.querySelector(`[data-compare-heading="${index}"]`).textContent = heading;
+      root.querySelector(`[data-indicator-heading="${index}"]`).textContent = heading;
       const values = {
         province: item?.province,
         district: item?.district,
@@ -5350,7 +5374,7 @@ function initializeComparison() {
         id: item?.id,
         area: item?.areaKm2 == null ? null : formatArea(item.areaKm2)
       };
-      alternateView.querySelectorAll(`[data-index="${index}"][data-comparison-field]`).forEach((cell) => {
+      root.querySelectorAll(`[data-index="${index}"][data-comparison-field]`).forEach((cell) => {
         cell.textContent = values[cell.dataset.comparisonField] ?? "—";
       });
       [...select.options].forEach((option) => {
@@ -5363,25 +5387,25 @@ function initializeComparison() {
           .catch((error) => state.comparisonErrors.set(item.id, error.message)));
       }
     });
-    updateComparisonIndicators(selects);
+    updateComparisonIndicators(selects, root);
     if (exportButton) exportButton.disabled = selectedIds.length === 0;
     if (shareButton) shareButton.disabled = selectedIds.length < 2;
     if (pending.length) {
       void Promise.all(pending).then(() => {
         if (requestId === state.comparisonRequestId && state.view === "comparisons") {
-          updateComparisonIndicators(selects);
+          updateComparisonIndicators(selects, root);
         }
       });
     }
   };
   selects.forEach((select) => select.addEventListener("change", update));
-  exportButton?.addEventListener("click", exportComparison);
-  shareButton?.addEventListener("click", copyComparisonLink);
+  exportButton?.addEventListener("click", () => exportComparison(root));
+  shareButton?.addEventListener("click", () => copyComparisonLink(root));
   update();
 }
 
-async function copyComparisonLink() {
-  const ids = [...alternateView.querySelectorAll(".compare-select")].map((select) => select.value).filter(Boolean);
+async function copyComparisonLink(root = comparisonWorkspace) {
+  const ids = [...root.querySelectorAll(".compare-select")].map((select) => select.value).filter(Boolean);
   if (ids.length < 2) return;
   const url = new URL(location.href);
   url.search = "";
@@ -5422,7 +5446,7 @@ function comparisonValue(indicators, key, result) {
     : formatCensusNumber(value);
 }
 
-function updateComparisonIndicators(selects) {
+function updateComparisonIndicators(selects, root = comparisonWorkspace) {
   const errors = [];
   selects.forEach((select, index) => {
     const id = select.value;
@@ -5431,7 +5455,7 @@ function updateComparisonIndicators(selects) {
     if (id && state.comparisonErrors.has(id)) {
       errors.push(`${state.municipalities.find((item) => item.id === id)?.name ?? "Selected municipality"}: ${state.comparisonErrors.get(id)}`);
     }
-    alternateView.querySelectorAll(`[data-index="${index}"][data-census-indicator]`).forEach((cell) => {
+    root.querySelectorAll(`[data-index="${index}"][data-census-indicator]`).forEach((cell) => {
       const key = cell.dataset.censusIndicator;
       const value = comparisonValue(indicators, key, result);
       cell.textContent = value ??
@@ -5444,15 +5468,15 @@ function updateComparisonIndicators(selects) {
             : "—");
     });
   });
-  const note = alternateView.querySelector("#compare-census-note");
+  const note = root.querySelector("#compare-census-note");
   if (note) note.textContent = errors.length
     ? `Census comparison data could not be loaded: ${errors.join(" · ")}`
     : "Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.";
-  renderMobileComparison(selects);
+  renderMobileComparison(selects, root);
 }
 
-function renderMobileComparison(selects) {
-  const container = alternateView.querySelector("#compare-mobile-data");
+function renderMobileComparison(selects, root = comparisonWorkspace) {
+  const container = root.querySelector("#compare-mobile-data");
   if (!container) return;
   container.replaceChildren();
   const selected = selects
@@ -5465,7 +5489,7 @@ function renderMobileComparison(selects) {
     container.append(empty);
     return;
   }
-  const rows = [...alternateView.querySelectorAll("#compare-census-table tbody tr")];
+  const rows = [...root.querySelectorAll("#compare-census-table tbody tr")];
   selected.forEach(({ id, municipality }) => {
     const card = document.createElement("article");
     card.className = "compare-mobile-card";
@@ -5487,8 +5511,8 @@ function renderMobileComparison(selects) {
   });
 }
 
-async function exportComparison() {
-  const selectedIds = [...alternateView.querySelectorAll(".compare-select")]
+async function exportComparison(root = comparisonWorkspace) {
+  const selectedIds = [...root.querySelectorAll(".compare-select")]
     .map((select) => select.value)
     .filter(Boolean);
   const selected = [...new Set(selectedIds)]
