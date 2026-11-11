@@ -85,21 +85,32 @@ export function createDataStore({
 } = {}) {
   if (!databaseUrl) return null;
 
+  // node-postgres 8.23 / pg-connection-string 2.14 warns for sslmode=require.
+  // Neon certificates support full hostname verification, so use verify-full
+  // instead of disabling TLS verification or accepting an unverified peer.
+  const secureDatabaseUrl = new URL(databaseUrl);
+  if (secureDatabaseUrl.protocol !== "postgres:" && secureDatabaseUrl.protocol !== "postgresql:") {
+    throw new TypeError("DATABASE_URL must use the PostgreSQL protocol.");
+  }
+  secureDatabaseUrl.searchParams.set("sslmode", "verify-full");
+
   const pool = new PoolClass({
-    connectionString: databaseUrl,
+    connectionString: secureDatabaseUrl.toString(),
     max: 5,
-    connectionTimeoutMillis: 30000,
-    idleTimeoutMillis: 30000
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 30000,
+    query_timeout: 5000
   });
 
-  async function withTransaction(operation) {
+  async function withTransaction(operation, { rollback = false } = {}) {
     const client = await pool.connect();
     let started = false;
     try {
       await client.query("BEGIN");
       started = true;
       const result = await operation(client);
-      await client.query("COMMIT");
+      await client.query(rollback ? "ROLLBACK" : "COMMIT");
+      started = false;
       return result;
     } catch (error) {
       if (started) {
@@ -170,6 +181,25 @@ export function createDataStore({
   }
 
   return {
+    async checkHealth() {
+      const result = await pool.query("SELECT 1 AS connected");
+      if (result.rows?.[0]?.connected !== 1) {
+        throw new DataStoreError("The database query check did not return the expected result.");
+      }
+      return true;
+    },
+
+    async verifyTransaction() {
+      await withTransaction(async (client) => {
+        await client.query("CREATE TEMPORARY TABLE civicstats_connection_probe (probe_id integer PRIMARY KEY, value text NOT NULL)");
+        await client.query("INSERT INTO civicstats_connection_probe (probe_id, value) VALUES ($1, $2)", [1, "rollback-check"]);
+        const result = await client.query("SELECT value FROM civicstats_connection_probe WHERE probe_id = $1", [1]);
+        if (result.rows?.[0]?.value !== "rollback-check") {
+          throw new DataStoreError("The database read/write transaction check failed.");
+        }
+      }, { rollback: true });
+    },
+
     async migrate() {
       const migrationSql = await Promise.all(migrations.map(async (migration) => ({
         ...migration,

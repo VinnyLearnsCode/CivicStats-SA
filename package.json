@@ -8,6 +8,7 @@
     "start": "node backend/server.js",
     "test": "node --test",
     "db:migrate": "node backend/migrate.js",
+    "db:verify": "node backend/verify-database.js",
     "worker": "node backend/worker.js"
   },
   "dependencies": {

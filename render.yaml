@@ -12,9 +12,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: civicstats-sa-db
-          property: connectionString
+        sync: false
       - key: CIVICSTATS_ADMIN_TOKEN
         generateValue: true
   - type: worker
@@ -27,12 +25,4 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: civicstats-sa-db
-          property: connectionString
-
-databases:
-  - name: civicstats-sa-db
-    plan: basic-256mb
-    databaseName: civicstats_sa
-    user: civicstats_sa
+        sync: false

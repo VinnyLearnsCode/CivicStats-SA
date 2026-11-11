@@ -1607,6 +1607,28 @@ export async function createAppServer({
       return;
     }
 
+    if (url.pathname === "/api/health/db") {
+      if (!dataStore) {
+        jsonResponse(response, 503, {
+          status: "error",
+          database: { connected: false, provider: "PostgreSQL", query_test: "failed" }
+        });
+        return;
+      }
+      void dataStore.checkHealth().then(() => {
+        jsonResponse(response, 200, {
+          status: "ok",
+          database: { connected: true, provider: "PostgreSQL", query_test: "passed" }
+        });
+      }).catch(() => {
+        jsonResponse(response, 503, {
+          status: "error",
+          database: { connected: false, provider: "PostgreSQL", query_test: "failed" }
+        });
+      });
+      return;
+    }
+
     if (url.pathname === "/api/sources") {
       jsonResponse(response, 200, { sources });
       return;
@@ -2352,20 +2374,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error("PORT must be a valid TCP port.");
   }
   const dataStore = createDataStore();
-  let server;
-  try {
-    if (dataStore) await dataStore.migrate();
-    server = await createAppServer({ dataStore });
-  } catch (error) {
-    if (dataStore) {
-      try {
-        await dataStore.close();
-      } catch (cleanupError) {
-        throw new AggregateError([error, cleanupError], "Server startup and database cleanup both failed.");
-      }
+  if (dataStore) {
+    try {
+      await dataStore.migrate();
+    } catch {
+      console.error("Database migrations could not be checked; starting the web server with database features unavailable.");
     }
-    throw error;
   }
+  const server = await createAppServer({ dataStore });
   server.on("close", () => {
     if (dataStore) {
       void dataStore.close().catch((error) =>

@@ -38,6 +38,46 @@ test("health reports the bundled South African boundary feature counts", async (
   });
 });
 
+test("database health fails safely when DATABASE_URL is not configured", async () => {
+  const response = await get("/api/health/db");
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    status: "error",
+    database: { connected: false, provider: "PostgreSQL", query_test: "failed" }
+  });
+});
+
+test("database health reports real query success and failure without diagnostics", async () => {
+  let queryWorks = true;
+  const probeServer = await createAppServer({
+    dataStore: {
+      async checkHealth() {
+        if (!queryWorks) throw new Error("secret host and password must not appear");
+      }
+    },
+    adminToken: null
+  });
+  await new Promise((resolve) => probeServer.listen(0, "127.0.0.1", resolve));
+  const probeUrl = `http://127.0.0.1:${probeServer.address().port}/api/health/db`;
+  try {
+    const healthy = await fetch(probeUrl);
+    assert.equal(healthy.status, 200);
+    assert.deepEqual(await healthy.json(), {
+      status: "ok",
+      database: { connected: true, provider: "PostgreSQL", query_test: "passed" }
+    });
+
+    queryWorks = false;
+    const unavailable = await fetch(probeUrl);
+    assert.equal(unavailable.status, 503);
+    const body = await unavailable.text();
+    assert.match(body, /"connected":false/);
+    assert.doesNotMatch(body, /secret|password|host/);
+  } finally {
+    await new Promise((resolve, reject) => probeServer.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 test("municipality search returns Johannesburg and a contained Gauteng hierarchy", async () => {
   const search = await get("/api/municipalities?q=Johannesburg");
   assert.equal(search.status, 200);
