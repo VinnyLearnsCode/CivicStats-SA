@@ -989,3 +989,40 @@ body { font-size: 15px; }
 @media (max-width: 760px) { .share-view-button { padding: 0 7px; font-size: 9px; } }
 
 .national-metrics-note { color: var(--muted); font-size: 9px; }
+
+/* Readability pass: replace the dashboard's tiny annotation type with body-sized text. */
+.legend-note,
+.legend-source-link,
+.layer-coverage,
+.map-layer-help,
+.map-tooltip-row,
+.map-tooltip-note,
+.source-summary p,
+.census-provenance > p,
+.source-checked-at,
+.publication-item p,
+.compare-series-period-source,
+.compare-series-context details,
+.compare-series-difference,
+.national-metrics-note { font-size: 12px !important; line-height: 1.55; }
+.map-legend,
+.map-legend-summary,
+.map-coverage-status,
+.map-zoom-path,
+.map-coordinate,
+.map-scale,
+.layer-option,
+.map-period-label,
+.layer-state,
+.map-tooltip-indicator,
+.map-tooltip-place,
+.map-tooltip-value,
+.source-label,
+.statusbar { font-size: 12px !important; }
+.map-tooltip-key,
+.layer-group-heading,
+.map-legend-toggle,
+.control-title,
+.legend-heading { font-size: 11px !important; }
+.compare-series-line,
+.compare-series-line > strong { font-size: 11px !important; }
