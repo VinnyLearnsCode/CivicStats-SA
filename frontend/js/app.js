@@ -4069,7 +4069,9 @@ function mapStyle(feature) {
 }
 
 function mapTooltipData(feature) {
-  const name = feature.properties.shapeType === "ADM1"
+  const geographyLevel = feature.properties.shapeType;
+  const geographyLabel = formatBoundaryLevel(geographyLevel).toLocaleLowerCase();
+  const name = geographyLevel === "ADM1"
     ? canonicalProvinceName(feature.properties.shapeName)
     : feature.properties.shapeName;
   if (state.mapLayer === "boundaries") {
@@ -4084,22 +4086,22 @@ function mapTooltipData(feature) {
   }
   if (state.mapLayer === "unemployment") {
     const period = state.labourData?.periods.find((item) => item.code === state.labourQuarter)?.label ?? state.labourQuarter;
-    if (feature.properties.shapeType !== "ADM1") {
-      return { place: name, indicator: "Official unemployment rate", value: "Province-level data only", period, source: "Statistics South Africa · QLFS", note: "Choose province boundaries to view this measure." };
+    if (geographyLevel !== "ADM1") {
+      return { place: name, indicator: "Official unemployment rate", value: `Not available at ${geographyLabel} level`, period, source: "Statistics South Africa · QLFS", note: "Stats SA publishes this estimate at province level only. Choose Provinces to see a verified value." };
     }
     const record = state.labourMapRecords.get(name);
     return {
       place: name,
       indicator: "Official unemployment rate",
-      value: Number.isFinite(record?.officialRate) ? `${record.officialRate.toFixed(1)}%` : "Data unavailable",
+      value: Number.isFinite(record?.officialRate) ? `${record.officialRate.toFixed(1)}%` : "No data for this province",
       period,
       source: "Statistics South Africa · Quarterly Labour Force Survey",
-      note: Number.isFinite(record?.officialRate) ? "Province-level estimate; not a municipal rate." : "No verified value is available for this province and period."
+      note: Number.isFinite(record?.officialRate) ? "Province-level estimate; not a district or municipal rate." : `No verified unemployment estimate is available for ${name} in ${period}.`
     };
   }
   if (state.mapLayer === "economy") {
-    if (feature.properties.shapeType !== "ADM1") {
-      return { place: name, indicator: "Regional GDP (GDP-R)", value: "Province-level data only", period: String(state.economyMapYear), source: "Statistics South Africa · GDP-R P0441.2", note: "Choose province boundaries to view this measure." };
+    if (geographyLevel !== "ADM1") {
+      return { place: name, indicator: "Regional GDP (GDP-R)", value: `Not available at ${geographyLabel} level`, period: String(state.economyMapYear), source: "Statistics South Africa · GDP-R P0441.2", note: "Stats SA publishes GDP-R at province level only. Choose Provinces to see a verified value." };
     }
     const record = state.provincialEconomyData?.records
       .find((item) => item.province === name);
@@ -4108,10 +4110,10 @@ function mapTooltipData(feature) {
       indicator: "Share of national GDP · nominal GDP-R",
       value: Number.isFinite(record?.gdpContributionPercent)
         ? `${record.gdpContributionPercent.toFixed(1)}% · R${formatCensusNumber(record.gdpCurrentPricesRandMillions)} million`
-        : "Data unavailable",
+        : "No data for this province",
       period: String(state.economyMapYear),
       source: "Statistics South Africa · GDP-R P0441.2",
-      note: Number.isFinite(record?.gdpContributionPercent) ? "Province-level estimate; GDP-R is not a municipal measure." : "No verified value is available for this province and year."
+      note: Number.isFinite(record?.gdpContributionPercent) ? "Province-level estimate; GDP-R is not a district or municipal measure." : `No verified GDP-R value is available for ${name} in ${state.economyMapYear}.`
     };
   }
   const record = censusMapRecordForFeature(feature);
@@ -4126,7 +4128,7 @@ function mapTooltipData(feature) {
     water: "Water-scheme household share"
   };
   if (!record) {
-    return { place: name, indicator: indicators[state.mapLayer] ?? "Census indicator", value: "Data unavailable", period, source, note: "No verified Census record is available for this area." };
+    return { place: name, indicator: indicators[state.mapLayer] ?? "Census indicator", value: "No data for this area", period, source, note: `No verified ${period} Census record is available for ${name} at this geography level.` };
   }
   let value;
   let note = record.aggregated
@@ -4154,6 +4156,9 @@ function mapTooltipData(feature) {
       : "Data unavailable";
     note = "Households reporting a water-scheme source; this does not measure water quality or supply continuity.";
     if (record.aggregated) note = `${record.municipalityCount} matched municipal records combined; ${note}`;
+  }
+  if (value === "Data unavailable") {
+    note = `No verified ${indicators[state.mapLayer] ?? "Census indicator"} value is available for ${name} in ${period}.`;
   }
   return { place: name, indicator: indicators[state.mapLayer] ?? "Census indicator", value, period, source, note };
 }
