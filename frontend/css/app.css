@@ -182,6 +182,7 @@ a { color: inherit; }
 .workspace-grid:not(.section-detail-active):not(.comparison-active) .center-column > :not(.map-panel) { grid-column: 1 / -1; }
 .workspace-grid.section-detail-active .detail-panel { grid-column: 1 / -1; }
 .workspace-grid:not(.comparison-active) .intelligence-panel, .workspace-grid:not(.comparison-active) .lower-grid, .workspace-grid:not(.comparison-active) .source-panel { display: none; }
+.workspace-grid:not(.section-detail-active):not(.comparison-active) .source-panel { display: block; }
 .workspace-grid.comparison-active { grid-template-columns: minmax(0, 1fr); }
 .workspace-grid.comparison-active .context-column { display: none; }
 .workspace-grid.comparison-active .center-column > :not(.map-panel):not(#comparison-workspace) { display: none; }
