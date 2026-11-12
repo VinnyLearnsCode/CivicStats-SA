@@ -6658,7 +6658,8 @@ function bindEvents() {
   });
   document.addEventListener("click", (event) => {
     const pinnedDetail = document.querySelector("#map-pinned-detail");
-    if (pinnedDetail && !pinnedDetail.hidden && !pinnedDetail.contains(event.target)) {
+    const clickedMapArea = event.target instanceof Element && event.target.closest("#map .leaflet-interactive");
+    if (pinnedDetail && !pinnedDetail.hidden && !pinnedDetail.contains(event.target) && !clickedMapArea) {
       closeMapPinnedDetail();
     }
     if (!event.target.closest(".global-search")) closeSearchResults();
