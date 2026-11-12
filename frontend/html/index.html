@@ -122,6 +122,7 @@
                 <div>
                   <span class="panel-kicker">GEOGRAPHIC INTELLIGENCE <span class="live-marker"></span></span>
                   <h2>National geographic explorer</h2>
+                  <p class="map-selection-help">Click anywhere inside an area to select · double-click to zoom · hover to preview</p>
                 </div>
                 <div class="map-heading-actions">
                   <button class="square-button mobile-profile-toggle" id="mobile-profile-toggle" aria-label="Show municipality information" aria-expanded="false" title="Municipality information">ⓘ</button>
@@ -144,9 +145,9 @@
                   <span class="map-hover-place" id="map-hover-compare-name"></span>
                   <button type="button" class="map-tooltip-compare" id="map-hover-compare-button">Add to Comparisons →</button>
                 </div>
-                <span class="visually-hidden" id="map-keyboard-instructions">Map areas are keyboard accessible. Press Tab to focus an area, use arrow keys to move through areas alphabetically, Home or End to jump to the first or last area, and Enter or Space to select or compare the focused area.</span>
+                <span class="visually-hidden" id="map-keyboard-instructions">Click anywhere inside a shaded area to select it. Double-click to zoom in. Hover to preview its data. Search for a place if its boundary is difficult to tap. Press Tab to focus map areas, use arrow keys to move by name, and Enter or Space to select or compare the focused area.</span>
                 <div class="map-overlay map-top-left">
-                  <span class="map-coordinate" id="map-location">SOUTH AFRICA · 9 PROVINCES</span>
+                  <span class="map-coordinate" id="map-location" role="status" aria-live="polite">SOUTH AFRICA · 9 PROVINCES</span>
                   <span class="map-scale">1 : <span id="map-scale">—</span></span>
                   <div class="map-zoom-path" id="map-zoom-path" role="status" aria-label="Current map detail: Province">
                     <span data-zoom-level="national">South Africa</span><i aria-hidden="true">›</i><span data-zoom-level="ADM1">Province</span><i aria-hidden="true">›</i><span data-zoom-level="ADM2">District / metro</span><i aria-hidden="true">›</i><span data-zoom-level="ADM3">Municipality</span>
@@ -210,11 +211,11 @@
                 </details>
                 <div class="map-loading" id="map-loading"><span class="spinner"></span>Loading verified boundary geometry…</div>
                 <div class="map-error" id="map-error" hidden></div>
+                <section class="map-pinned-detail" id="map-pinned-detail" aria-label="Pinned map indicator detail" hidden>
+                  <div class="map-pinned-detail-heading"><span class="panel-kicker">MAP VALUE</span><button class="square-button" id="close-map-pinned-detail" type="button" aria-label="Close map detail">×</button></div>
+                  <div id="map-pinned-detail-content" aria-live="polite"></div>
+                </section>
               </div>
-              <section class="map-pinned-detail" id="map-pinned-detail" aria-label="Pinned map indicator detail" hidden>
-                <div class="map-pinned-detail-heading"><span class="panel-kicker">MAP VALUE</span><button class="square-button" id="close-map-pinned-detail" type="button" aria-label="Close map detail">×</button></div>
-                <div id="map-pinned-detail-content" aria-live="polite"></div>
-              </section>
               <div class="map-footer">
                 <span id="boundary-count">— boundary features</span>
                 <span>Source: geoBoundaries · OCHA ROSEA / Municipal Demarcation Board</span>

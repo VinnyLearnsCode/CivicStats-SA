@@ -3791,7 +3791,7 @@ function baseStyle(feature) {
 }
 
 function selectedStyle() {
-  return { color: "#57c7c1", weight: 2, opacity: 1, fillColor: "#40726c", fillOpacity: 0.43 };
+  return { color: "#eafffb", weight: 3, opacity: 1, fillColor: "#29b6ad", fillOpacity: 0.48 };
 }
 
 function comparisonStyle() {
@@ -4205,13 +4205,7 @@ function pinMapIndicatorDetail(feature) {
   if (!panel || !content) return;
   content.replaceChildren(mapTooltip(feature));
   panel.hidden = false;
-  requestAnimationFrame(() => {
-    const bounds = panel.getBoundingClientRect();
-    if (bounds.bottom > window.innerHeight || bounds.top < 0) {
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      panel.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
-    }
-  });
+  document.querySelector(".map-wrap")?.classList.add("has-pinned-detail");
 }
 
 function closeMapPinnedDetail() {
@@ -4219,6 +4213,7 @@ function closeMapPinnedDetail() {
   const content = document.querySelector("#map-pinned-detail-content");
   if (panel) panel.hidden = true;
   content?.replaceChildren();
+  document.querySelector(".map-wrap")?.classList.remove("has-pinned-detail");
 }
 
 function updateMapZoomPath() {
@@ -4968,12 +4963,14 @@ function updateMapRegionAccessibility() {
     path.setAttribute("role", "button");
     path.setAttribute("focusable", "true");
     path.setAttribute("tabindex", properties.shapeID === state.mapRovingId ? "0" : "-1");
+    path.classList.toggle("map-region-selected", properties.shapeID === state.selected?.id);
+    const details = mapTooltipData(feature);
     const action = state.comparisonMode
       ? state.comparisonSelections.includes(properties.shapeID)
         ? "Press Enter or Space to remove this area from comparison."
         : "Press Enter or Space to add this area to comparison."
-      : "Press Enter or Space to open this area.";
-    path.setAttribute("aria-label", `${mapTooltip(feature)}. ${action} Use arrow keys to move by area name; Home and End jump to the first and last area.`);
+      : "Click once or press Enter or Space to select this area. Double-click to zoom in.";
+    path.setAttribute("aria-label", `${details.place}. ${details.indicator}: ${details.value}. Period: ${details.period}. Source: ${details.source}.${details.note ? ` ${details.note}` : ""} ${action} Use arrow keys to move by area name; Home and End jump to the first and last area.`);
     if (state.comparisonMode) {
       path.setAttribute("aria-pressed", String(state.comparisonSelections.includes(properties.shapeID)));
       path.removeAttribute("aria-current");
@@ -4986,6 +4983,7 @@ function updateMapRegionAccessibility() {
     path.dataset.keyboardNavigationReady = "true";
     path.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (event.detail > 1) return;
       activateMapRegion(feature, { focus: false });
     });
     path.addEventListener("keydown", (event) => handleMapRegionKeydown(layer, event));
@@ -5156,7 +5154,7 @@ async function selectGeography(item, { focus = true } = {}) {
     }
     updateProfile(selected);
     document.querySelector("#map-location").textContent =
-      `${formatBoundaryLevel(selected.level).toUpperCase()} · ${selected.name.toLocaleUpperCase()}`;
+      `SELECTED · ${formatBoundaryLevel(selected.level).toUpperCase()} · ${selected.name.toLocaleUpperCase()}`;
     if (state.view !== "dashboard") setView("dashboard");
     if (focus && state.map) {
       const bounds = L.geoJSON(feature).getBounds();
