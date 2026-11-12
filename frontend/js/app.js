@@ -69,6 +69,7 @@ const state = {
   comparisonScales: null,
   comparisonScalesPromise: null,
   comparisonScalesError: false,
+  comparisonReferenceId: null,
   collections: new Map(),
   geographies: [],
   comparisonMode: false,
@@ -986,7 +987,10 @@ async function copyShareableViewLink() {
   if (state.view !== "dashboard") url.searchParams.set("view", state.view);
   if (state.view === "comparisons") {
     const ids = (state.comparisonSelections ?? []).filter(Boolean).slice(0, 3);
-    if (ids.length >= 2) url.searchParams.set("compare", ids.join(","));
+    if (ids.length >= 2) {
+      url.searchParams.set("compare", ids.join(","));
+      if (ids.includes(state.comparisonReferenceId)) url.searchParams.set("reference", state.comparisonReferenceId);
+    }
   } else if (state.selected?.id) {
     url.searchParams.set("geography", state.selected.id);
     if (tabContent[state.tab]) url.searchParams.set("tab", state.tab);
@@ -5049,6 +5053,7 @@ function openComparisonWithMunicipality(id) {
   }
   state.comparisonMode = false;
   state.comparisonSelections = [id];
+  state.comparisonReferenceId = id;
   setView("comparisons");
   renderMapComparisonSelection();
 }
@@ -5061,6 +5066,7 @@ function resetMapToNational() {
   renderSearchResults("");
   state.comparisonMode = false;
   state.comparisonSelections = [];
+  state.comparisonReferenceId = null;
   renderMapComparisonSelection();
   if (state.boundaryLevel !== "ADM3") {
     document.querySelector("#boundary-level").value = "ADM3";
@@ -5479,6 +5485,9 @@ function renderComparison() {
           .join("")}
       </select>
     </label>`).join("");
+  const referenceField = `<label class="compare-reference-control">DIFFERENCE REFERENCE
+    <select id="compare-reference" aria-label="Municipality used as the difference reference" disabled><option value="">Add two places to compare</option></select>
+  </label>`;
   const metadataRows = [
     ["Province", "province"],
     ["District / metro", "district"],
@@ -5506,7 +5515,7 @@ function renderComparison() {
       `<td data-census-indicator="${key}" data-index="${index}">—</td>`
     ).join("")}</tr>`
   ).join("");
-  return `<div class="compare-controls">${selectFields}<div class="view-actions"><button class="action-button" id="compare-export" disabled title="Export source-linked Census indicators for the selected municipalities">Export comparison data</button><button class="action-button" id="compare-share" disabled title="Copy a link that opens this municipality comparison">Copy comparison link</button></div></div>
+  return `<div class="compare-controls">${selectFields}${referenceField}<div class="view-actions"><button class="action-button" id="compare-export" disabled title="Export source-linked Census indicators for the selected municipalities">Export comparison data</button><button class="action-button" id="compare-share" disabled title="Copy a link that opens this municipality comparison">Copy comparison link</button></div></div>
     <section class="compare-results" aria-labelledby="compare-results-title">
       <header class="compare-results-heading"><div><span class="panel-kicker">SIDE-BY-SIDE RESULTS</span><h3 id="compare-results-title">Census population &amp; household indicators</h3></div><span class="compare-results-period">CENSUS · 2011 / 2022</span></header>
       <p class="source-check-note" id="compare-census-note">Bars compare selected municipalities within each indicator. Household shares use a 0–100 scale, population change uses a centre line for gains or losses, and other measures scale to the highest selected value. Labels retain their units and Census periods.</p>
@@ -5662,6 +5671,7 @@ function initializeComparison(root) {
     const selectedIds = selects.map((select) => select.value).filter(Boolean);
     state.comparisonSelections = selectedIds;
     renderMapComparisonSelection();
+    updateComparisonReference(selects, root);
     const pending = [];
     selects.forEach((select, index) => {
       const item = state.municipalities.find((municipality) => municipality.id === select.value);
@@ -5700,6 +5710,10 @@ function initializeComparison(root) {
     }
   };
   selects.forEach((select) => select.addEventListener("change", update));
+  root.querySelector("#compare-reference")?.addEventListener("change", (event) => {
+    state.comparisonReferenceId = event.currentTarget.value || null;
+    updateComparisonIndicators(selects, root);
+  });
   exportButton?.addEventListener("click", () => exportComparison(root));
   shareButton?.addEventListener("click", () => copyComparisonLink(root));
   update();
@@ -5711,16 +5725,44 @@ function initializeComparison(root) {
   });
 }
 
+function updateComparisonReference(selects, root = comparisonWorkspace) {
+  const control = root.querySelector("#compare-reference");
+  if (!control) return;
+  const selected = selects.map((select) => state.municipalities.find((item) => item.id === select.value)).filter(Boolean);
+  const reference = selected.find((item) => item.id === state.comparisonReferenceId) ?? selected[0] ?? null;
+  state.comparisonReferenceId = reference?.id ?? null;
+  control.replaceChildren();
+  if (selected.length < 2) {
+    const option = document.createElement("option");
+    option.value = reference?.id ?? "";
+    option.textContent = reference ? `${reference.name} · add another place to compare` : "Add two places to compare";
+    option.selected = true;
+    control.append(option);
+    control.disabled = true;
+    return;
+  }
+  selected.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.name;
+    option.selected = item.id === reference.id;
+    control.append(option);
+  });
+  control.value = reference.id;
+  control.disabled = false;
+}
+
 async function copyComparisonLink(root = comparisonWorkspace) {
   const ids = [...root.querySelectorAll(".compare-select")].map((select) => select.value).filter(Boolean);
   if (ids.length < 2) return;
   const url = new URL(location.href);
   url.search = "";
   url.searchParams.set("compare", ids.join(","));
+  if (ids.includes(state.comparisonReferenceId)) url.searchParams.set("reference", state.comparisonReferenceId);
   url.hash = "";
   try {
     await navigator.clipboard.writeText(url.href);
-    showToast("Comparison link copied. It opens with these municipalities selected.");
+    showToast("Comparison link copied with the selected places and reference.");
   } catch {
     showToast("Could not copy the link. Copy this address from your browser after selecting the municipalities.");
   }
@@ -5777,7 +5819,8 @@ function updateComparisonIndicators(selects, root = comparisonWorkspace) {
   });
   const note = root.querySelector("#compare-census-note");
   if (note) {
-    const differenceNote = " Differences are measured against the first selected municipality; share and growth differences are percentage points.";
+    const referenceName = state.municipalities.find((item) => item.id === state.comparisonReferenceId)?.name;
+    const differenceNote = ` Differences are measured against ${referenceName ?? "the selected reference place"}; share and growth differences are percentage points.`;
     const scaleNote = state.comparisonScales
       ? " Bar scales are fixed to the full 213-municipality Census dataset."
       : state.comparisonScalesError
@@ -5786,6 +5829,24 @@ function updateComparisonIndicators(selects, root = comparisonWorkspace) {
     note.textContent = `${errors.length ? `Census comparison data could not be loaded: ${errors.join(" · ")}` : "Values use their labelled units and Census periods."}${differenceNote}${scaleNote}`;
   }
   renderComparisonSeries(selects, root);
+}
+
+function comparisonIndicatorMetadata(key) {
+  const entries = {
+    total_pop_2011: ["Census 2011 · Stats SA", "People counted by the Census on its reference date."],
+    total_pop_2022: ["Census 2022 · Stats SA", "People counted by the Census on its reference date."],
+    growth_rate_2011_to_2022: ["Census 2011–2022 · Stats SA", "Change between the two Census population counts; this is not an annual growth rate or forecast."],
+    households_2011: ["Census 2011 · Stats SA", "Census count of households, separate from the number of people."],
+    households_2022: ["Census 2022 · Stats SA", "Census count of households, separate from the number of people."],
+    avg_household_size_2022: ["Census 2022 · Stats SA", "Average number of people per household."],
+    water_scheme_share_2022: ["Census 2022 · Stats SA", "Share of households reporting a water-scheme source; this does not measure water quality or supply continuity."],
+    flush_toilet_share_2022: ["Census 2022 · Stats SA", "Share of households reporting a flush toilet; this does not establish that facilities are working."],
+    electricity_cooking_share_2022: ["Census 2022 · Stats SA", "Share of households reporting electricity as their main cooking energy source."],
+    electricity_lighting_share_2022: ["Census 2022 municipal fact sheet · Stats SA", "Share of households reporting electricity as their main lighting source; this does not measure outages or reliability."],
+    school_attendance_ages_5_to_24_2022: ["Census 2022 · Stats SA", "People aged 5–24 reported as attending an educational institution; this does not measure attendance quality or attainment."]
+  };
+  const [periodSource, definition] = entries[key] ?? ["Census · Stats SA", "Source period and definition are shown in the linked Census dataset."];
+  return { periodSource, definition };
 }
 
 function renderComparisonSeries(selects, root = comparisonWorkspace) {
@@ -5802,87 +5863,121 @@ function renderComparisonSeries(selects, root = comparisonWorkspace) {
     container.append(empty);
     return;
   }
-  const rows = [...root.querySelectorAll("#compare-census-table tbody tr")];
-  rows.forEach((row) => {
-    const label = row.cells[0]?.textContent ?? "Indicator";
-    const key = row.querySelector("[data-census-indicator]")?.dataset.censusIndicator;
-    const article = document.createElement("article");
-    article.className = "compare-series-row";
-    const heading = document.createElement("h4");
-    heading.textContent = label;
-    article.append(heading);
-    const values = document.createElement("div");
-    values.className = "labour-series-values";
-    const mode = key?.includes("growth_rate") ? "signed"
-      : key?.includes("_share_") ? "share"
-        : "relative";
-    const entries = selected.map(({ id, municipality }) => {
-      const columnIndex = selects.findIndex((select) => select.value === id);
-      const value = row.querySelector(`[data-index="${columnIndex}"][data-census-indicator]`)?.textContent ?? "—";
-      const numeric = Number.parseFloat(value.replaceAll(",", ""));
-      return { id, municipality, value, numeric };
-    });
-    const firstNumeric = entries[0]?.numeric;
-    const domain = state.comparisonScales?.[key];
-    entries.forEach(({ id, municipality, value, numeric }, entryIndex) => {
-      const line = document.createElement("div");
-      line.className = "labour-series-line compare-series-line";
-      const place = document.createElement("span");
-      place.className = "compare-series-place";
-      place.textContent = municipality.name;
-      place.title = municipality.name;
-      const track = document.createElement("div");
-      track.className = `census-bar-track compare-series-track${mode === "signed" ? " signed" : ""}`;
-      track.hidden = !Number.isFinite(domain) || !Number.isFinite(numeric);
-      const fill = document.createElement("span");
-      fill.className = `compare-series-fill${numeric < 0 ? " negative" : ""}`;
-      if (Number.isFinite(numeric) && Number.isFinite(domain) && domain > 0) {
-        if (mode === "share") {
-          fill.style.width = `${Math.max(0, Math.min(100, numeric / domain * 100))}%`;
-        } else if (mode === "signed") {
-          const width = Math.min(50, Math.abs(numeric) / domain * 50);
-          fill.style.width = `${width}%`;
-          fill.style.left = numeric < 0 ? `${50 - width}%` : "50%";
-        } else {
-          fill.style.width = `${Math.max(0, Math.min(100, numeric / domain * 100))}%`;
+  const reference = selected.find((entry) => entry.id === state.comparisonReferenceId) ?? selected[0];
+  const groups = [
+    { title: "Population & change", keys: ["total_pop_2011", "total_pop_2022", "growth_rate_2011_to_2022"] },
+    { title: "Household profile", keys: ["households_2011", "households_2022", "avg_household_size_2022"] },
+    { title: "Household services", keys: ["water_scheme_share_2022", "flush_toilet_share_2022", "electricity_cooking_share_2022", "electricity_lighting_share_2022"] },
+    { title: "Education", keys: ["school_attendance_ages_5_to_24_2022"] }
+  ];
+  const rows = new Map([...root.querySelectorAll("#compare-census-table tbody tr")]
+    .map((row) => [row.querySelector("[data-census-indicator]")?.dataset.censusIndicator, row]));
+  groups.forEach(({ title, keys }) => {
+    const groupRows = keys.map((key) => rows.get(key)).filter(Boolean);
+    if (!groupRows.length) return;
+    const section = document.createElement("section");
+    section.className = "compare-series-group";
+    const groupHeading = document.createElement("h4");
+    groupHeading.textContent = title;
+    section.append(groupHeading);
+    groupRows.forEach((row) => {
+      const label = row.cells[0]?.textContent ?? "Indicator";
+      const key = row.querySelector("[data-census-indicator]")?.dataset.censusIndicator;
+      const metadata = comparisonIndicatorMetadata(key);
+      const article = document.createElement("article");
+      article.className = "compare-series-row";
+      const heading = document.createElement("h5");
+      heading.textContent = label;
+      const context = document.createElement("div");
+      context.className = "compare-series-context";
+      const periodSource = document.createElement("span");
+      periodSource.className = "compare-series-period-source";
+      periodSource.textContent = metadata.periodSource;
+      const definition = document.createElement("details");
+      const definitionSummary = document.createElement("summary");
+      definitionSummary.textContent = "Definition";
+      const definitionText = document.createElement("p");
+      definitionText.textContent = metadata.definition;
+      definition.append(definitionSummary, definitionText);
+      context.append(periodSource, definition);
+      article.append(heading, context);
+      const values = document.createElement("div");
+      values.className = "labour-series-values";
+      const mode = key?.includes("growth_rate") ? "signed"
+        : key?.includes("_share_") ? "share"
+          : "relative";
+      const entries = selected.map(({ id, municipality }) => {
+        const columnIndex = selects.findIndex((select) => select.value === id);
+        const value = row.querySelector(`[data-index="${columnIndex}"][data-census-indicator]`)?.textContent ?? "—";
+        const numeric = Number.parseFloat(value.replaceAll(",", ""));
+        return { id, municipality, value, numeric };
+      });
+      const referenceNumeric = entries.find((entry) => entry.id === reference.id)?.numeric;
+      const domain = state.comparisonScales?.[key];
+      entries.forEach(({ id, municipality, value, numeric }) => {
+        const line = document.createElement("div");
+        line.className = "labour-series-line compare-series-line";
+        const place = document.createElement("span");
+        place.className = "compare-series-place";
+        place.textContent = municipality.name;
+        place.title = municipality.name;
+        const track = document.createElement("div");
+        track.className = `census-bar-track compare-series-track${mode === "signed" ? " signed" : ""}`;
+        track.hidden = !Number.isFinite(domain) || !Number.isFinite(numeric);
+        const fill = document.createElement("span");
+        fill.className = `compare-series-fill${numeric < 0 ? " negative" : ""}`;
+        if (Number.isFinite(numeric) && Number.isFinite(domain) && domain > 0) {
+          if (mode === "signed") {
+            const width = Math.min(50, Math.abs(numeric) / domain * 50);
+            fill.style.width = `${width}%`;
+            fill.style.left = numeric < 0 ? `${50 - width}%` : "50%";
+          } else {
+            fill.style.width = `${Math.max(0, Math.min(100, numeric / domain * 100))}%`;
+          }
         }
-      }
-      track.append(fill);
-      const amount = document.createElement("span");
-      amount.className = "compare-series-amount";
-      const exactValue = document.createElement("strong");
-      exactValue.textContent = value;
-      amount.append(exactValue);
-      let difference = "";
-      if (entryIndex === 0 && entries.length > 1) {
-        difference = "Reference";
-      } else if (entryIndex > 0 && Number.isFinite(numeric) && Number.isFinite(firstNumeric)) {
-        const delta = numeric - firstNumeric;
-        const precision = mode === "share" || mode === "signed" || key === "avg_household_size_2022" ? 1 : 0;
-        const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
-        const units = mode === "share" || mode === "signed"
-          ? "pp"
-          : key?.startsWith("households_")
-            ? "households"
-            : key === "avg_household_size_2022"
-              ? "people / household"
-              : "people";
-        difference = `${sign}${formatCensusNumber(Math.abs(delta), precision)} ${units}`;
-      } else if (entryIndex > 0 && entries.length > 1) {
-        difference = "Difference unavailable";
-      }
-      if (difference) {
-        const differenceLabel = document.createElement("small");
-        differenceLabel.className = "compare-series-difference";
-        differenceLabel.textContent = difference;
-        amount.append(differenceLabel);
-      }
-      line.setAttribute("aria-label", `${municipality.name}: ${label}, ${value}${difference ? `, difference from ${entries[0].municipality.name}: ${difference}` : ""}`);
-      line.append(place, track, amount);
-      values.append(line);
+        track.append(fill);
+        const amount = document.createElement("span");
+        amount.className = "compare-series-amount";
+        const exactValue = document.createElement("strong");
+        exactValue.textContent = value;
+        amount.append(exactValue);
+        let difference = "";
+        if (id === reference.id && entries.length > 1) {
+          difference = "Reference";
+        } else if (Number.isFinite(numeric) && Number.isFinite(referenceNumeric)) {
+          const delta = numeric - referenceNumeric;
+          const precision = mode === "share" || mode === "signed" || key === "avg_household_size_2022" ? 1 : 0;
+          const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
+          const units = mode === "share" || mode === "signed"
+            ? "pp"
+            : key?.startsWith("households_")
+              ? "households"
+              : key === "avg_household_size_2022"
+                ? "people / household"
+                : "people";
+          difference = `${sign}${formatCensusNumber(Math.abs(delta), precision)} ${units}`;
+        } else if (entries.length > 1) {
+          difference = "Difference unavailable";
+        }
+        if (difference) {
+          const differenceLabel = document.createElement("small");
+          differenceLabel.className = "compare-series-difference";
+          differenceLabel.textContent = difference;
+          amount.append(differenceLabel);
+        }
+        const comparisonContext = id === reference.id && entries.length > 1
+          ? ", reference place"
+          : difference
+            ? `, difference from ${reference.municipality.name}: ${difference}`
+            : "";
+        line.setAttribute("aria-label", `${municipality.name}: ${label}, ${value}${comparisonContext}`);
+        line.append(place, track, amount);
+        values.append(line);
+      });
+      article.append(values);
+      section.append(article);
     });
-    article.append(values);
-    container.append(article);
+    container.append(section);
   });
 }
 
@@ -6462,6 +6557,10 @@ async function initialize() {
     );
     if (comparisonIds.length >= 2) {
       state.comparisonSelections = comparisonIds;
+      const requestedReference = params.get("reference");
+      state.comparisonReferenceId = comparisonIds.includes(requestedReference)
+        ? requestedReference
+        : comparisonIds[0];
       renderMapComparisonSelection();
       setView("comparisons");
     } else if (requestedGeography) {
