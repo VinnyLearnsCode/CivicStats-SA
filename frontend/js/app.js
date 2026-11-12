@@ -6,6 +6,8 @@ const state = {
   autoBoundaryReady: false,
   autoBoundaryRequest: null,
   mapLayer: "population",
+  mapDetailMode: false,
+  mapHoverPreviews: true,
   mapDataTableOpen: false,
   mapRovingId: null,
   censusMapRecords: new Map(),
@@ -4201,7 +4203,7 @@ function mapTooltipData(feature) {
   return { place: name, indicator: indicators[state.mapLayer] ?? "Census indicator", value, period, source, note };
 }
 
-function mapTooltip(feature, { stateLabel = "PREVIEW" } = {}) {
+function mapTooltip(feature, { stateLabel = "PREVIEW", compact = false } = {}) {
   const data = mapTooltipData(feature);
   const tooltip = document.createElement("div");
   tooltip.className = "map-tooltip-card";
@@ -4223,6 +4225,8 @@ function mapTooltip(feature, { stateLabel = "PREVIEW" } = {}) {
   value.className = "map-tooltip-value";
   value.textContent = data.value;
   tooltip.append(value);
+
+  if (compact) return tooltip;
 
   const metadata = document.createElement("div");
   metadata.className = "map-tooltip-metadata";
@@ -4277,7 +4281,7 @@ function updateMapZoomPath() {
 
 function showMapHoverComparison(feature, event) {
   const action = document.querySelector("#map-hover-compare");
-  if (!action) return;
+  if (!action || !state.mapHoverPreviews) return;
   if (feature.properties.shapeType !== "ADM3") {
     action.hidden = true;
     state.hoveredMapGeographyId = null;
@@ -5108,11 +5112,13 @@ function setMapLayer(collection, { fitBounds = true } = {}) {
   state.boundaryLayer = L.geoJSON(collection, {
     style: styleForFeature,
     onEachFeature: (feature, layer) => {
-      layer.bindTooltip(mapTooltip(feature), { sticky: true, direction: "top" });
+      if (state.mapHoverPreviews) layer.bindTooltip(mapTooltip(feature, { compact: !state.mapDetailMode }), { sticky: true, direction: "top" });
       layer.on({
         mouseover: (event) => {
-          layer.setTooltipContent(mapTooltip(feature));
-          showMapHoverComparison(feature, event);
+          if (state.mapHoverPreviews) {
+            layer.setTooltipContent(mapTooltip(feature, { compact: !state.mapDetailMode }));
+            showMapHoverComparison(feature, event);
+          }
           if (feature.properties.shapeID !== state.selected?.id && !isComparisonSelection(feature)) {
             layer.setStyle({
               ...mapStyle(feature),
@@ -6500,6 +6506,26 @@ function bindEvents() {
   };
   mapLegend.addEventListener("toggle", updateLegendToggle);
   updateLegendToggle();
+  document.querySelectorAll("[data-map-detail-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.mapDetailMode = button.dataset.mapDetailMode === "detailed";
+      document.querySelectorAll("[data-map-detail-mode]").forEach((option) => {
+        option.setAttribute("aria-pressed", String(option === button));
+      });
+      state.boundaryLayer?.getLayers().forEach((layer) => {
+        if (layer.isTooltipOpen?.()) layer.setTooltipContent(mapTooltip(layer.feature, { compact: !state.mapDetailMode }));
+      });
+    });
+  });
+  document.querySelector("#map-hover-preview-toggle").addEventListener("change", (event) => {
+    state.mapHoverPreviews = event.currentTarget.checked;
+    document.querySelector("#map-hover-compare").hidden = true;
+    state.hoveredMapGeographyId = null;
+    state.boundaryLayer?.getLayers().forEach((layer) => {
+      if (state.mapHoverPreviews) layer.bindTooltip(mapTooltip(layer.feature, { compact: !state.mapDetailMode }), { sticky: true, direction: "top" });
+      else layer.unbindTooltip();
+    });
+  });
   document.querySelector(".map-wrap").addEventListener("pointerleave", () => {
     document.querySelector("#map-hover-compare").hidden = true;
     state.hoveredMapGeographyId = null;
@@ -6868,9 +6894,6 @@ async function initialize() {
       await selectGeography(requestedGeography, { focus: false });
       const requestedTab = params.get("tab");
       if (requestedTab && tabContent[requestedTab]) setTab(requestedTab);
-    } else {
-      const johannesburg = state.municipalities.find((item) => item.name === "City of Johannesburg");
-      if (johannesburg) updateProfile(johannesburg);
     }
     const requestedView = params.get("view");
     if (requestedView && Object.hasOwn(viewCopy, requestedView) && requestedView !== "comparisons" && !comparisonIds.length) {
