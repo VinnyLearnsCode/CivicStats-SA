@@ -4199,6 +4199,21 @@ function mapTooltip(feature) {
   return tooltip;
 }
 
+function pinMapIndicatorDetail(feature) {
+  const panel = document.querySelector("#map-pinned-detail");
+  const content = document.querySelector("#map-pinned-detail-content");
+  if (!panel || !content) return;
+  content.replaceChildren(mapTooltip(feature));
+  panel.hidden = false;
+}
+
+function closeMapPinnedDetail() {
+  const panel = document.querySelector("#map-pinned-detail");
+  const content = document.querySelector("#map-pinned-detail-content");
+  if (panel) panel.hidden = true;
+  content?.replaceChildren();
+}
+
 function updateMapZoomPath() {
   const path = document.querySelector("#map-zoom-path");
   if (!path) return;
@@ -4975,6 +4990,7 @@ function activateMapRegion(feature, { focus = true } = {}) {
     toggleMapComparison(feature.properties.shapeID);
     return;
   }
+  pinMapIndicatorDetail(feature);
   const item = state.geographies.find((geography) => geography.id === feature.properties.shapeID);
   if (item) void selectGeography(item, { focus });
 }
@@ -5216,6 +5232,7 @@ function openComparisonWithMunicipality(id) {
 }
 
 function resetMapToNational() {
+  closeMapPinnedDetail();
   if (state.view !== "dashboard") setView("dashboard");
   state.autoBoundaryDetail = true;
   document.querySelector("#auto-boundary-detail").checked = true;
@@ -6440,6 +6457,7 @@ function bindEvents() {
   document.querySelectorAll('input[name="map-layer"]').forEach((input) => {
     input.addEventListener("change", () => {
       if (!input.checked || input.disabled) return;
+      closeMapPinnedDetail();
       state.mapLayer = input.value;
       refreshMapStyles();
     });
@@ -6456,6 +6474,7 @@ function bindEvents() {
   document.querySelector("#fit-map").addEventListener("click", () => {
     resetMapToNational();
   });
+  document.querySelector("#close-map-pinned-detail").addEventListener("click", closeMapPinnedDetail);
   document.querySelector("#map-compact-toggle").addEventListener("click", (event) => {
     const compact = workspaceGrid.classList.toggle("map-compact");
     event.currentTarget.textContent = compact ? "Expand map" : "Compact map";
@@ -6605,6 +6624,10 @@ function bindEvents() {
     if (item) void selectGeography(item);
   });
   document.addEventListener("click", (event) => {
+    const pinnedDetail = document.querySelector("#map-pinned-detail");
+    if (pinnedDetail && !pinnedDetail.hidden && !pinnedDetail.contains(event.target)) {
+      closeMapPinnedDetail();
+    }
     if (!event.target.closest(".global-search")) closeSearchResults();
   });
   document.addEventListener("keydown", (event) => {

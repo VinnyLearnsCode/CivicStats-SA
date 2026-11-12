@@ -132,7 +132,7 @@
                     <option value="ADM1">Provinces</option>
                   </select>
                   <label class="map-auto-detail" title="Show provinces, districts and municipalities as you zoom"><input id="auto-boundary-detail" type="checkbox" checked> Auto zoom</label>
-                  <button class="square-button" id="fit-map" aria-label="Show all South Africa" title="Show all South Africa">⌖</button>
+                  <button class="action-button reset-map-button" id="fit-map" aria-label="Reset map to South Africa" title="Clear the selected place and show all South Africa">Reset to South Africa</button>
                   <button class="square-button" id="fullscreen-map" aria-label="Enter map full screen" title="Full screen map">⛶</button>
                   <button class="action-button map-compact-toggle" id="map-compact-toggle" type="button" aria-expanded="false" aria-controls="map" hidden>Expand map</button>
                   <button class="action-button map-compare-toggle" id="compare-map-toggle" type="button" aria-pressed="false">Select to compare</button>
@@ -144,6 +144,10 @@
                   <span class="map-hover-place" id="map-hover-compare-name"></span>
                   <button type="button" class="map-tooltip-compare" id="map-hover-compare-button">Add to Comparisons →</button>
                 </div>
+                <section class="map-pinned-detail" id="map-pinned-detail" aria-label="Pinned map indicator detail" hidden>
+                  <div class="map-pinned-detail-heading"><span class="panel-kicker">MAP VALUE</span><button class="square-button" id="close-map-pinned-detail" type="button" aria-label="Close map detail">×</button></div>
+                  <div id="map-pinned-detail-content" aria-live="polite"></div>
+                </section>
                 <span class="visually-hidden" id="map-keyboard-instructions">Map areas are keyboard accessible. Press Tab to focus an area, use arrow keys to move through areas alphabetically, Home or End to jump to the first or last area, and Enter or Space to select or compare the focused area.</span>
                 <div class="map-overlay map-top-left">
                   <span class="map-coordinate" id="map-location">SOUTH AFRICA · 9 PROVINCES</span>
