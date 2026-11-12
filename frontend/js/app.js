@@ -4035,6 +4035,22 @@ function activeMapRecords() {
     .filter(Boolean);
 }
 
+function appendMapCoverage(items) {
+  const areas = (state.boundaryLayer?.getLayers() ?? [])
+    .map((layer) => layer.feature)
+    .filter((feature) => feature?.properties?.shapeID);
+  if (!areas.length) return;
+  const verified = areas.filter((feature) => {
+    const value = mapIndicatorValue(feature);
+    return typeof value === "number" && Number.isFinite(value);
+  }).length;
+  const level = ({ ADM1: "provinces", ADM2: "districts / metros", ADM3: "municipalities" })[state.boundaryLevel] ?? "areas";
+  const coverage = document.createElement("span");
+  coverage.className = "map-coverage-status";
+  coverage.textContent = `Verified values: ${verified} of ${areas.length} ${level}`;
+  items.append(coverage);
+}
+
 function mapIndicatorBreaks() {
   const valueKey = state.mapLayer === "unemployment"
     ? "officialRate"
@@ -4442,6 +4458,7 @@ function renderMapLegend() {
         : `WATER SCHEME SHARE · CENSUS ${state.censusMapYear}`;
   }
   appendNationalBorderLegend(items);
+  appendMapCoverage(items);
   const records = activeMapRecords();
   if (!records.length) {
     const note = document.createElement("span");
