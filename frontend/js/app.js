@@ -4339,6 +4339,17 @@ function exportMapDataTable() {
   showToast("Displayed map table downloaded as CSV.");
 }
 
+function appendMissingMapLegendEntry(items, label = "No compatible source value · neutral gray") {
+  const row = document.createElement("span");
+  row.className = "map-legend-range";
+  const swatch = document.createElement("i");
+  swatch.className = "map-legend-swatch missing-swatch";
+  const text = document.createElement("span");
+  text.textContent = label;
+  row.append(swatch, text);
+  items.append(row);
+}
+
 function renderMapLegend() {
   const heading = document.querySelector("#map-legend-heading");
   const items = document.querySelector("#map-legend-items");
@@ -4396,6 +4407,7 @@ function renderMapLegend() {
           : "Census map values are unavailable.";
     }
     items.append(note);
+    appendMissingMapLegendEntry(items, "No compatible values · map fill is neutral gray");
     const failed = state.mapLayer === "unemployment" ? Boolean(state.labourMapError)
       : state.mapLayer === "economy" ? Boolean(state.economyMapError)
         : Boolean(state.censusMapError);
@@ -4418,8 +4430,28 @@ function renderMapLegend() {
             : record.waterSchemeSharePercent)
     .filter((value) => typeof value === "number" && Number.isFinite(value))
     .sort((left, right) => left - right);
+  if (!values.length) {
+    const note = document.createElement("span");
+    note.className = "legend-note";
+    note.textContent = "No compatible indicator values are available for these areas.";
+    items.append(note);
+    appendMissingMapLegendEntry(items, "No compatible values · map fill is neutral gray");
+    return;
+  }
   const breaks = mapIndicatorBreaks();
   const colors = ["#29463d", "#3c6252", "#61836a", "#9d9861", "#c1814f"];
+  const direction = document.createElement("div");
+  direction.className = "map-legend-direction";
+  const lowerLabel = document.createElement("span");
+  lowerLabel.textContent = "LOWER";
+  const gradient = document.createElement("i");
+  gradient.className = "map-legend-gradient";
+  gradient.setAttribute("aria-hidden", "true");
+  gradient.style.background = `linear-gradient(90deg, ${colors.join(", ")})`;
+  const higherLabel = document.createElement("span");
+  higherLabel.textContent = "HIGHER";
+  direction.append(lowerLabel, gradient, higherLabel);
+  items.append(direction);
   colors.forEach((color, index) => {
     const row = document.createElement("span");
     row.className = "map-legend-range";
@@ -4496,14 +4528,8 @@ function renderMapLegend() {
   interpretationNote.textContent = interpretation;
   const scaleNote = document.createElement("span");
   scaleNote.className = "legend-note";
-  scaleNote.textContent = "Band 1 is lowest and Band 5 is highest. Ranges are recalculated for the areas shown. Point to an area for its exact value, or open the data table for a text list.";
-  const missing = document.createElement("span");
-  missing.className = "map-legend-range";
-  const missingSwatch = document.createElement("i");
-  missingSwatch.className = "map-legend-swatch missing-swatch";
-  const missingLabel = document.createElement("span");
-  missingLabel.textContent = "Data unavailable";
-  missing.append(missingSwatch, missingLabel);
+  scaleNote.textContent = "Green shows lower values; orange shows higher values within the areas shown. Higher does not always mean better—read the indicator note and units. Bands are recalculated for the displayed areas.";
+  const missingLabel = "No compatible source value · neutral gray";
   const note = document.createElement("span");
   note.className = "legend-note";
   const aggregateNote = state.boundaryLevel === "ADM3" || ["boundaries", "unemployment", "economy"].includes(state.mapLayer)
@@ -4519,7 +4545,9 @@ function renderMapLegend() {
     ? " Municipality membership is crosswalked by representative point to geoBoundaries 2020 polygons; parent-area results are derived, not official Stats SA tabulations."
     : "";
   note.textContent = `${layerMetadata.detail} ${layerMetadata.updated}.${aggregateNote}${geographyNote} Neutral fill indicates missing data.`;
-  items.append(interpretationNote, scaleNote, missing, note);
+  items.append(interpretationNote, scaleNote);
+  appendMissingMapLegendEntry(items, missingLabel);
+  items.append(note);
   if (layerMetadata.url) {
     const sourceLink = document.createElement("a");
     sourceLink.className = "legend-source-link";
@@ -4790,6 +4818,42 @@ function refreshMapStyles() {
   updateMapLayerControls();
   updateMapRegionAccessibility();
   if (state.mapDataTableOpen) renderMapDataTable();
+}
+
+function showMapLayerGuidance(layer) {
+  const help = document.querySelector("#map-layer-help");
+  if (!help) return;
+  help.textContent = layer === "finance"
+    ? "Municipal finance and audit records load in municipality profiles. Select a municipality, then open its profile; a complete compatible national finance measure is not available for map shading."
+    : "A complete, period-compatible infrastructure indicator is not available for map shading. Use Projects for named project records, or Service delivery for Census household-access measures.";
+  help.hidden = false;
+}
+
+async function activateProvinceMapLayer(layer) {
+  const help = document.querySelector("#map-layer-help");
+  if (help) help.hidden = true;
+  state.autoBoundaryDetail = false;
+  document.querySelector("#auto-boundary-detail").checked = false;
+  const boundarySelect = document.querySelector("#boundary-level");
+  if (state.boundaryLevel !== "ADM1") {
+    boundarySelect.value = "ADM1";
+    try {
+      await changeBoundaryLevel("ADM1");
+    } catch (error) {
+      showToast(`Could not switch to province boundaries: ${error.message}`);
+      return;
+    }
+  }
+  state.mapLayer = layer;
+  if (layer === "unemployment") void loadProvincialLabourData();
+  else void loadProvincialGdpData(state.economyMapYear);
+  refreshMapStyles();
+  if (help) {
+    help.textContent = layer === "unemployment"
+      ? "Province boundaries selected. Stats SA unemployment estimates are available at province level only."
+      : `Province boundaries selected. GDP-R is available at province level only for ${state.economyMapYear}.`;
+    help.hidden = false;
+  }
 }
 
 async function loadCensusMapData(year) {
@@ -6378,6 +6442,15 @@ function bindEvents() {
       if (!input.checked || input.disabled) return;
       state.mapLayer = input.value;
       refreshMapStyles();
+    });
+  });
+  document.querySelectorAll(".layer-coverage-action").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.layerAction === "province") {
+        void activateProvinceMapLayer(button.dataset.layer);
+      } else {
+        showMapLayerGuidance(button.dataset.layer);
+      }
     });
   });
   document.querySelector("#fit-map").addEventListener("click", () => {

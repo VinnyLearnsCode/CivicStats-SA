@@ -190,6 +190,8 @@ a { color: inherit; }
 .workspace-grid.map-compact .map-panel:not(:fullscreen) .map-wrap { height: 190px; min-height: 0; max-height: none; transition: height 180ms ease; }
 .workspace-grid.map-compact .map-panel:not(:fullscreen) .layer-option { display: none; }
 .workspace-grid.map-compact .map-panel:not(:fullscreen) .layer-option.selected { display: grid; }
+.workspace-grid.map-compact .map-panel:not(:fullscreen) .layer-coverage-action,
+.workspace-grid.map-compact .map-panel:not(:fullscreen) .map-layer-help { display: none; }
 .workspace-grid.map-compact .map-panel:not(:fullscreen) .map-legend { max-height: 66px; }
 .map-compact-toggle { min-height: 27px; padding: 0 8px; white-space: nowrap; font-size: 9px; }
 .map-compact-toggle[hidden] { display: none; }
@@ -255,6 +257,11 @@ a { color: inherit; }
 .services-swatch { border-color: #6e8d7e; background: #476253; }
 .layer-state { grid-column: 3; grid-row: 1; justify-self: end; color: #69756f; font: 7px var(--mono); white-space: nowrap; }
 .layer-option.selected .layer-state { color: var(--accent); }
+.layer-coverage-action { display: block; margin: -2px 0 4px 14px; padding: 1px 0; border: 0; background: transparent; color: var(--accent-soft); cursor: pointer; font: 7px var(--mono); text-align: left; }
+.layer-coverage-action:hover { color: var(--accent); text-decoration: underline; }
+.layer-coverage-action:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.map-layer-help { margin: 5px 0 0; padding: 6px; border-top: 1px solid var(--border-soft); color: #aab5af; font-size: 8px; line-height: 1.4; }
+.map-layer-help[hidden] { display: none; }
 .map-legend { bottom: 12px; left: 12px; width: 210px; max-width: calc(100% - 24px); max-height: min(45vh, 300px); overflow: auto; font-size: 8px; }
 .map-legend-summary { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px; cursor: pointer; list-style: none; }
 .map-legend-summary::-webkit-details-marker { display: none; }
@@ -263,6 +270,8 @@ a { color: inherit; }
 .map-legend-toggle { flex: 0 0 auto; color: var(--accent-soft); font: 7px var(--mono); letter-spacing: .06em; }
 .map-legend-items { display: flex; flex-direction: column; gap: 5px; padding: 0 8px 8px; }
 .map-legend-range { display: flex; align-items: center; gap: 6px; }
+.map-legend-direction { display: grid; grid-template-columns: max-content minmax(35px, 1fr) max-content; align-items: center; gap: 7px; color: #8c9992; font: 7px var(--mono); }
+.map-legend-gradient { height: 7px; border: 1px solid #718079; }
 .map-legend-swatch { display: inline-block; width: 10px; height: 8px; border: 1px solid #718079; }
 .missing-swatch { background: #303936; }
 .legend-source-link { color: var(--accent-soft); font-size: 8px; text-decoration: none; }
