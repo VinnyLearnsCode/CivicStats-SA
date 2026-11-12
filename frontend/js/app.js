@@ -5506,10 +5506,9 @@ function renderComparison() {
   return `<div class="compare-controls">${selectFields}<div class="view-actions"><button class="action-button" id="compare-export" disabled title="Export source-linked Census indicators for the selected municipalities">Export comparison data</button><button class="action-button" id="compare-share" disabled title="Copy a link that opens this municipality comparison">Copy comparison link</button></div></div>
     <section class="compare-results" aria-labelledby="compare-results-title">
       <header class="compare-results-heading"><div><span class="panel-kicker">SIDE-BY-SIDE RESULTS</span><h3 id="compare-results-title">Census population &amp; household indicators</h3></div><span class="compare-results-period">CENSUS · 2011 / 2022</span></header>
-      <p class="compare-scroll-note">Swipe horizontally to view places side by side. Select another municipality above to add its figures.</p>
-      <p class="source-check-note" id="compare-census-note">Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.</p>
-      <div class="compare-mobile-data" id="compare-mobile-data" aria-live="polite"></div>
-      <div class="data-table-wrap compare-census-wrap"><table class="data-table compare-table" id="compare-census-table"><thead><tr><th>Indicator</th><th data-indicator-heading="0">Geography 1</th><th data-indicator-heading="1">Geography 2</th><th data-indicator-heading="2">Geography 3</th></tr></thead><tbody>${indicatorRows}</tbody></table></div>
+      <p class="source-check-note" id="compare-census-note">Bars compare selected municipalities within each indicator. Household shares use a 0–100 scale, population change uses a centre line for gains or losses, and other measures scale to the highest selected value. Labels retain their units and Census periods.</p>
+      <div class="labour-series-list compare-series-list" id="compare-series-list" aria-live="polite"></div>
+      <div class="visually-hidden"><table class="data-table compare-table" id="compare-census-table"><thead><tr><th>Indicator</th><th data-indicator-heading="0">Geography 1</th><th data-indicator-heading="1">Geography 2</th><th data-indicator-heading="2">Geography 3</th></tr></thead><tbody>${indicatorRows}</tbody></table></div>
     </section>
     <details class="compare-metadata-details"><summary>Geographic details</summary><p class="compare-scroll-note">Boundary metadata for the selected places.</p><div class="data-table-wrap compare-metadata-wrap"><table class="data-table compare-table"><thead><tr><th>Property</th><th data-compare-heading="0">Geography 1</th><th data-compare-heading="1">Geography 2</th><th data-compare-heading="2">Geography 3</th></tr></thead><tbody>${metadataRows}</tbody></table></div></details>`;
 }
@@ -5707,11 +5706,11 @@ function updateComparisonIndicators(selects, root = comparisonWorkspace) {
   if (note) note.textContent = errors.length
     ? `Census comparison data could not be loaded: ${errors.join(" · ")}`
     : "Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.";
-  renderMobileComparison(selects, root);
+  renderComparisonSeries(selects, root);
 }
 
-function renderMobileComparison(selects, root = comparisonWorkspace) {
-  const container = root.querySelector("#compare-mobile-data");
+function renderComparisonSeries(selects, root = comparisonWorkspace) {
+  const container = root.querySelector("#compare-series-list");
   if (!container) return;
   container.replaceChildren();
   const selected = selects
@@ -5725,24 +5724,65 @@ function renderMobileComparison(selects, root = comparisonWorkspace) {
     return;
   }
   const rows = [...root.querySelectorAll("#compare-census-table tbody tr")];
-  selected.forEach(({ id, municipality }) => {
-    const card = document.createElement("article");
-    card.className = "compare-mobile-card";
+  rows.forEach((row) => {
+    const label = row.cells[0]?.textContent ?? "Indicator";
+    const key = row.querySelector("[data-census-indicator]")?.dataset.censusIndicator;
+    const article = document.createElement("article");
+    article.className = "compare-series-row";
     const heading = document.createElement("h4");
-    heading.textContent = municipality.name;
-    const list = document.createElement("dl");
-    rows.forEach((row) => {
-      const label = row.cells[0]?.textContent ?? "Indicator";
+    heading.textContent = label;
+    article.append(heading);
+    const values = document.createElement("div");
+    values.className = "labour-series-values";
+    const mode = key?.includes("growth_rate") ? "signed"
+      : key?.includes("_share_") ? "share"
+        : "relative";
+    selected.forEach(({ id, municipality }) => {
       const columnIndex = selects.findIndex((select) => select.value === id);
       const value = row.querySelector(`[data-index="${columnIndex}"][data-census-indicator]`)?.textContent ?? "—";
-      const term = document.createElement("dt");
-      term.textContent = label;
-      const description = document.createElement("dd");
-      description.textContent = value;
-      list.append(term, description);
+      const numeric = Number.parseFloat(value.replaceAll(",", ""));
+      const line = document.createElement("div");
+      line.className = "labour-series-line compare-series-line";
+      line.setAttribute("aria-label", `${municipality.name}: ${label}, ${value}`);
+      const place = document.createElement("span");
+      place.className = "compare-series-place";
+      place.textContent = municipality.name;
+      place.title = municipality.name;
+      const track = document.createElement("div");
+      track.className = `census-bar-track compare-series-track${mode === "signed" ? " signed" : ""}`;
+      const fill = document.createElement("span");
+      fill.className = `compare-series-fill${numeric < 0 ? " negative" : ""}`;
+      if (Number.isFinite(numeric)) {
+        if (mode === "share") {
+          fill.style.width = `${Math.max(0, Math.min(100, numeric))}%`;
+        } else if (mode === "signed") {
+          const valuesForMeasure = selected.map(({ id: selectedId }) => {
+            const selectedIndex = selects.findIndex((select) => select.value === selectedId);
+            const selectedValue = row.querySelector(`[data-index="${selectedIndex}"][data-census-indicator]`)?.textContent ?? "";
+            return Number.parseFloat(selectedValue.replaceAll(",", ""));
+          }).filter(Number.isFinite);
+          const maxAbs = Math.max(1, ...valuesForMeasure.map(Math.abs));
+          const width = Math.min(50, Math.abs(numeric) / maxAbs * 50);
+          fill.style.width = `${width}%`;
+          fill.style.left = numeric < 0 ? `${50 - width}%` : "50%";
+        } else {
+          const valuesForMeasure = selected.map(({ id: selectedId }) => {
+            const selectedIndex = selects.findIndex((select) => select.value === selectedId);
+            const selectedValue = row.querySelector(`[data-index="${selectedIndex}"][data-census-indicator]`)?.textContent ?? "";
+            return Number.parseFloat(selectedValue.replaceAll(",", ""));
+          }).filter((selectedValue) => Number.isFinite(selectedValue) && selectedValue > 0);
+          const maximum = Math.max(1, ...valuesForMeasure);
+          fill.style.width = `${Math.max(0, Math.min(100, numeric / maximum * 100))}%`;
+        }
+      }
+      track.append(fill);
+      const amount = document.createElement("strong");
+      amount.textContent = value;
+      line.append(place, track, amount);
+      values.append(line);
     });
-    card.append(heading, list);
-    container.append(card);
+    article.append(values);
+    container.append(article);
   });
 }
 
