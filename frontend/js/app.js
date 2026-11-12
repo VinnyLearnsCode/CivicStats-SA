@@ -4254,7 +4254,6 @@ function pinMapIndicatorDetail(feature) {
   if (!panel || !content) return;
   content.replaceChildren(mapTooltip(feature, { stateLabel: "SELECTED" }));
   panel.hidden = false;
-  document.querySelector(".map-wrap")?.classList.add("has-pinned-detail");
 }
 
 function closeMapPinnedDetail() {
@@ -4262,7 +4261,6 @@ function closeMapPinnedDetail() {
   const content = document.querySelector("#map-pinned-detail-content");
   if (panel) panel.hidden = true;
   content?.replaceChildren();
-  document.querySelector(".map-wrap")?.classList.remove("has-pinned-detail");
 }
 
 function updateMapZoomPath() {
@@ -4920,9 +4918,11 @@ function setMobileLayerPickerOpen(open) {
   const control = document.querySelector("#layer-control");
   const toggle = document.querySelector("#mobile-layer-toggle");
   if (!control || !toggle) return;
-  control.classList.toggle("mobile-layer-open", open);
+  const compactViewport = window.matchMedia("(max-width: 900px)").matches;
+  control.classList.toggle("mobile-layer-open", compactViewport && open);
+  control.classList.toggle("layer-control-collapsed", !compactViewport && !open);
   toggle.setAttribute("aria-expanded", String(open));
-  toggle.textContent = open ? "Done" : "Change";
+  toggle.textContent = open ? (compactViewport ? "Done" : "Hide") : "Change";
   if (!open) document.querySelector("#map-layer-help").hidden = true;
 }
 
@@ -4948,7 +4948,7 @@ async function activateProvinceMapLayer(layer) {
   if (help) {
     help.hidden = true;
   }
-  if (window.matchMedia("(max-width: 640px)").matches) setMobileLayerPickerOpen(false);
+  if (window.matchMedia("(max-width: 900px)").matches) setMobileLayerPickerOpen(false);
   showToast(layer === "unemployment"
     ? "Province boundaries selected. Showing the province-only unemployment layer."
     : `Province boundaries selected. Showing province GDP-R for ${state.economyMapYear}.`);
@@ -6490,6 +6490,16 @@ function updateActiveSearchResult(index) {
 }
 
 function bindEvents() {
+  const compactMapViewport = window.matchMedia("(max-width: 900px)");
+  setMobileLayerPickerOpen(!compactMapViewport.matches);
+  compactMapViewport.addEventListener("change", (event) => setMobileLayerPickerOpen(!event.matches));
+  const mapLegend = document.querySelector("#map-legend");
+  const updateLegendToggle = () => {
+    const toggle = mapLegend.querySelector(".map-legend-toggle");
+    if (toggle) toggle.textContent = mapLegend.open ? "HIDE" : "SHOW";
+  };
+  mapLegend.addEventListener("toggle", updateLegendToggle);
+  updateLegendToggle();
   document.querySelector(".map-wrap").addEventListener("pointerleave", () => {
     document.querySelector("#map-hover-compare").hidden = true;
     state.hoveredMapGeographyId = null;
@@ -6556,12 +6566,12 @@ function bindEvents() {
       document.querySelector("#map-layer-help").hidden = true;
       state.mapLayer = input.value;
       refreshMapStyles();
-      if (window.matchMedia("(max-width: 640px)").matches) setMobileLayerPickerOpen(false);
+      if (window.matchMedia("(max-width: 900px)").matches) setMobileLayerPickerOpen(false);
     });
   });
   document.querySelector("#mobile-layer-toggle").addEventListener("click", () => {
-    const control = document.querySelector("#layer-control");
-    setMobileLayerPickerOpen(!control.classList.contains("mobile-layer-open"));
+    const toggle = document.querySelector("#mobile-layer-toggle");
+    setMobileLayerPickerOpen(toggle.getAttribute("aria-expanded") !== "true");
   });
   document.querySelectorAll(".layer-coverage-action").forEach((button) => {
     button.addEventListener("click", () => {
