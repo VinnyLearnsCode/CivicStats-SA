@@ -238,7 +238,7 @@ a { color: inherit; }
 .map-zoom-path [aria-current="step"] { color: var(--accent-soft); }
 .map-coordinate, .map-scale { color: #aab5af; font: 8px var(--mono); letter-spacing: .05em; }
 .map-scale { border-left: 1px solid var(--border); padding-left: 9px; color: #74817b; }
-.layer-control { top: 12px; right: 12px; width: 192px; max-height: calc(100% - 24px); overflow-y: auto; padding: 9px; }
+.layer-control { top: 12px; right: 12px; width: min(290px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto; padding: 10px; }
 .layer-control-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .layer-control-heading .control-title { margin-bottom: 6px; }
 .layer-control-toggle { display: inline-flex; min-height: 34px; align-items: center; padding: 0 8px; border: 1px solid var(--border); background: #202825; color: var(--accent-soft); cursor: pointer; font: 9px var(--mono); }
@@ -253,12 +253,12 @@ a { color: inherit; }
 .map-period-label { display: flex; align-items: center; justify-content: space-between; margin: 3px 0 6px; color: #85918b; font: 7px var(--mono); letter-spacing: .06em; }
 .map-period-label select { min-width: 62px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 0; background: #202725; color: var(--text); font: 8px var(--mono); }
 .map-period-label[hidden] { display: none; }
-.layer-option { display: grid; min-height: 32px; grid-template-columns: 8px minmax(0, 1fr) max-content; grid-template-rows: auto auto; align-items: center; column-gap: 6px; row-gap: 1px; color: #aab5af; font-size: 9px; cursor: pointer; }
+.layer-option { display: grid; min-width: 0; min-height: 40px; grid-template-columns: 10px minmax(0, 1fr); grid-template-rows: auto auto auto; align-items: center; column-gap: 8px; row-gap: 3px; color: #aab5af; font-size: 12px; line-height: 1.35; cursor: pointer; }
 .layer-option input { position: absolute; opacity: 0; }
 .layer-option input:focus-visible + .layer-swatch { outline: 1px solid var(--accent); outline-offset: 2px; }
-.layer-option .layer-swatch { grid-column: 1; grid-row: 1 / 3; }
-.layer-name { grid-column: 2; grid-row: 1; min-width: 0; line-height: 1.2; }
-.layer-coverage { grid-column: 2 / 4; grid-row: 2; color: #74817b; font: 7px var(--mono); line-height: 1.2; }
+.layer-option .layer-swatch { grid-column: 1; grid-row: 1 / 4; }
+.layer-name { grid-column: 2; grid-row: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
+.layer-coverage { grid-column: 2; grid-row: 2; min-width: 0; color: #a0aca5; font: 11px var(--mono); line-height: 1.35; overflow-wrap: anywhere; }
 .layer-option.selected { color: var(--text); }
 .layer-option.selected .layer-coverage { color: var(--accent-soft); }
 .layer-option.unavailable { color: #69746f; cursor: not-allowed; }
@@ -269,7 +269,7 @@ a { color: inherit; }
 .unemployment-swatch { border-color: #be8171; background: #89574e; }
 .muted-swatch { border-color: #976c69; background: #674d4a; }
 .services-swatch { border-color: #6e8d7e; background: #476253; }
-.layer-state { grid-column: 3; grid-row: 1; justify-self: end; color: #69756f; font: 7px var(--mono); white-space: nowrap; }
+.layer-state { grid-column: 2; grid-row: 3; justify-self: start; min-width: 0; color: #a0aca5; font: 10px var(--mono); line-height: 1.3; white-space: normal; overflow-wrap: anywhere; }
 .layer-option.selected .layer-state { color: var(--accent); }
 .map-display-settings { display: grid; gap: 6px; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border-soft); }
 .map-display-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
@@ -686,7 +686,7 @@ a { color: inherit; }
   /* Keep the map usable on tablets: layer choices become an intentional popover. */
   .layer-control { top: 8px; right: 8px; width: auto; max-width: min(250px, calc(100% - 16px)); max-height: calc(100% - 16px); padding: 7px; }
   .layer-control-toggle { display: inline-flex; min-height: 36px; align-items: center; padding: 0 9px; border: 1px solid var(--border); background: #202825; color: var(--accent-soft); cursor: pointer; font: 9px var(--mono); }
-  .layer-control.mobile-layer-open { width: min(270px, calc(100% - 16px)); }
+  .layer-control.mobile-layer-open { width: min(320px, calc(100% - 16px)); }
   .layer-control.mobile-layer-open .layer-option-list { max-height: min(58vh, 370px); overflow-y: auto; overscroll-behavior: contain; }
   .layer-control:not(.mobile-layer-open) .map-period-label,
   .layer-control:not(.mobile-layer-open) .layer-option-list .layer-option:not(.selected),
