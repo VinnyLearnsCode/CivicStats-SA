@@ -4066,44 +4066,137 @@ function mapStyle(feature) {
   };
 }
 
-function mapTooltip(feature) {
+function mapTooltipData(feature) {
   const name = feature.properties.shapeType === "ADM1"
     ? canonicalProvinceName(feature.properties.shapeName)
     : feature.properties.shapeName;
-  if (state.mapLayer === "boundaries") return `${name} · ${formatBoundaryLevel(feature.properties.shapeType)} boundary · geoBoundaries, 2020 vintage`;
+  if (state.mapLayer === "boundaries") {
+    return {
+      place: name,
+      indicator: "Administrative boundary",
+      value: `${formatBoundaryLevel(feature.properties.shapeType)} boundary`,
+      period: "2020 boundary vintage",
+      source: "geoBoundaries · OCHA ROSEA / Municipal Demarcation Board",
+      note: "Shows the mapped administrative outline, not a statistical value."
+    };
+  }
   if (state.mapLayer === "unemployment") {
-    if (feature.properties.shapeType !== "ADM1") return `${name} · Provincial estimates only · Stats SA QLFS`;
-    const record = state.labourMapRecords.get(name);
     const period = state.labourData?.periods.find((item) => item.code === state.labourQuarter)?.label ?? state.labourQuarter;
-    if (!record) return `${name} · Unemployment data unavailable · ${period} · Stats SA QLFS`;
-    return `${name} · Official unemployment rate: ${record.officialRate.toFixed(1)}% · ${period} · Stats SA QLFS`;
+    if (feature.properties.shapeType !== "ADM1") {
+      return { place: name, indicator: "Official unemployment rate", value: "Province-level data only", period, source: "Statistics South Africa · QLFS", note: "Choose province boundaries to view this measure." };
+    }
+    const record = state.labourMapRecords.get(name);
+    return {
+      place: name,
+      indicator: "Official unemployment rate",
+      value: Number.isFinite(record?.officialRate) ? `${record.officialRate.toFixed(1)}%` : "Data unavailable",
+      period,
+      source: "Statistics South Africa · Quarterly Labour Force Survey",
+      note: Number.isFinite(record?.officialRate) ? "Province-level estimate; not a municipal rate." : "No verified value is available for this province and period."
+    };
   }
   if (state.mapLayer === "economy") {
-    if (feature.properties.shapeType !== "ADM1") return `${name} · Province-level GDP-R only · Stats SA GDP-R P0441.2`;
+    if (feature.properties.shapeType !== "ADM1") {
+      return { place: name, indicator: "Regional GDP (GDP-R)", value: "Province-level data only", period: String(state.economyMapYear), source: "Statistics South Africa · GDP-R P0441.2", note: "Choose province boundaries to view this measure." };
+    }
     const record = state.provincialEconomyData?.records
       .find((item) => item.province === name);
-    if (!record) return `${name} · GDP-R data unavailable · ${state.economyMapYear} · Stats SA GDP-R P0441.2`;
-    return `${name} · Share of national GDP: ${record.gdpContributionPercent.toFixed(1)}% · Nominal GDP: R${formatCensusNumber(record.gdpCurrentPricesRandMillions)} million · ${state.economyMapYear} · Stats SA GDP-R P0441.2`;
+    return {
+      place: name,
+      indicator: "Share of national GDP · nominal GDP-R",
+      value: Number.isFinite(record?.gdpContributionPercent)
+        ? `${record.gdpContributionPercent.toFixed(1)}% · R${formatCensusNumber(record.gdpCurrentPricesRandMillions)} million`
+        : "Data unavailable",
+      period: String(state.economyMapYear),
+      source: "Statistics South Africa · GDP-R P0441.2",
+      note: Number.isFinite(record?.gdpContributionPercent) ? "Province-level estimate; GDP-R is not a municipal measure." : "No verified value is available for this province and year."
+    };
   }
   const record = censusMapRecordForFeature(feature);
-  if (!record) return `${name} · Census value unavailable · ${state.censusMapYear} · Statistics South Africa Census`;
-  const aggregatePrefix = record.aggregated
-    ? `${record.municipalityCount} matched municipalities · `
-    : "";
+  const source = state.mapLayer === "electricity"
+    ? "Stats SA · municipal Census fact sheet"
+    : "Statistics South Africa · Census";
+  const period = state.mapLayer === "growth" ? "Census 2011–2022" : `Census ${state.censusMapYear}`;
+  const indicators = {
+    population: "Population density",
+    growth: "Population change",
+    electricity: "Electricity as main lighting source",
+    water: "Water-scheme household share"
+  };
+  if (!record) {
+    return { place: name, indicator: indicators[state.mapLayer] ?? "Census indicator", value: "Data unavailable", period, source, note: "No verified Census record is available for this area." };
+  }
+  let value;
+  let note = record.aggregated
+    ? `${record.municipalityCount} matched municipal records combined for this larger area.`
+    : "Municipality-level Census record.";
   if (state.mapLayer === "growth") {
     const growth = record.populationGrowthPercent;
-    const method = record.aggregated ? "derived population change" : "reported population growth";
-    return Number.isFinite(growth)
-      ? `${name} · ${aggregatePrefix}${method}: ${formatCensusNumber(growth, 1)}% · Census 2011–2022 · Statistics South Africa`
-      : `${name} · Population change unavailable · Census 2011–2022 · Statistics South Africa`;
+    value = Number.isFinite(growth) ? `${formatCensusNumber(growth, 1)}%` : "Data unavailable";
+    note = record.aggregated
+      ? `${record.municipalityCount} matched municipalities combined; change is derived from summed Census totals.`
+      : "Reported Census population change from 2011 to 2022.";
+  } else if (state.mapLayer === "population") {
+    value = Number.isFinite(record.populationDensityPerKm2)
+      ? `${formatCensusNumber(record.populationDensityPerKm2, 1)} people/km²`
+      : "Data unavailable";
+  } else if (state.mapLayer === "electricity") {
+    value = Number.isFinite(record.electricityLightingSharePercent)
+      ? `${formatCensusNumber(record.electricityLightingSharePercent, 1)}% of households`
+      : "Data unavailable";
+    note = "Households reporting electricity as their main lighting source; this does not measure outages or reliability.";
+    if (record.aggregated) note = `${record.municipalityCount} matched municipal records combined; ${note}`;
+  } else {
+    value = Number.isFinite(record.waterSchemeSharePercent)
+      ? `${formatCensusNumber(record.waterSchemeSharePercent, 1)}% of households`
+      : "Data unavailable";
+    note = "Households reporting a water-scheme source; this does not measure water quality or supply continuity.";
+    if (record.aggregated) note = `${record.municipalityCount} matched municipal records combined; ${note}`;
   }
-  if (state.mapLayer === "population") {
-    return `${name} · ${aggregatePrefix}Population density: ${formatCensusNumber(record.populationDensityPerKm2, 1)} people/km² · Census ${record.year} · Statistics South Africa`;
+  return { place: name, indicator: indicators[state.mapLayer] ?? "Census indicator", value, period, source, note };
+}
+
+function mapTooltip(feature) {
+  const data = mapTooltipData(feature);
+  const tooltip = document.createElement("div");
+  tooltip.className = "map-tooltip-card";
+  const place = document.createElement("strong");
+  place.className = "map-tooltip-place";
+  place.textContent = data.place;
+  tooltip.append(place);
+
+  const indicator = document.createElement("span");
+  indicator.className = "map-tooltip-indicator";
+  indicator.textContent = data.indicator;
+  tooltip.append(indicator);
+
+  const value = document.createElement("strong");
+  value.className = "map-tooltip-value";
+  value.textContent = data.value;
+  tooltip.append(value);
+
+  const metadata = document.createElement("div");
+  metadata.className = "map-tooltip-metadata";
+  for (const [label, content] of [["PERIOD", data.period], ["SOURCE", data.source]]) {
+    const row = document.createElement("div");
+    row.className = "map-tooltip-row";
+    const key = document.createElement("span");
+    key.className = "map-tooltip-key";
+    key.textContent = label;
+    const detail = document.createElement("span");
+    detail.className = "map-tooltip-detail";
+    detail.textContent = content;
+    row.append(key, detail);
+    metadata.append(row);
   }
-  if (state.mapLayer === "electricity") {
-    return `${name} · ${aggregatePrefix}${formatCensusNumber(record.electricityLightingSharePercent, 1)}% of households reported electricity as their main lighting source · Census ${record.year} · Stats SA municipal fact sheet`;
+  tooltip.append(metadata);
+  if (data.note) {
+    const note = document.createElement("span");
+    note.className = "map-tooltip-note";
+    note.textContent = data.note;
+    tooltip.append(note);
   }
-  return `${name} · ${aggregatePrefix}Households reporting a water-scheme source: ${formatCensusNumber(record.waterSchemeSharePercent, 1)}% · Census ${record.year} · Statistics South Africa`;
+  return tooltip;
 }
 
 function updateMapZoomPath() {
