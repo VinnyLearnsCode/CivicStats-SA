@@ -4057,23 +4057,23 @@ function mapTooltip(feature) {
   const name = feature.properties.shapeType === "ADM1"
     ? canonicalProvinceName(feature.properties.shapeName)
     : feature.properties.shapeName;
-  if (state.mapLayer === "boundaries") return name;
+  if (state.mapLayer === "boundaries") return `${name} · ${formatBoundaryLevel(feature.properties.shapeType)} boundary · geoBoundaries, 2020 vintage`;
   if (state.mapLayer === "unemployment") {
-    if (feature.properties.shapeType !== "ADM1") return `${name} · select Provinces to show provincial estimates`;
+    if (feature.properties.shapeType !== "ADM1") return `${name} · Provincial estimates only · Stats SA QLFS`;
     const record = state.labourMapRecords.get(name);
-    if (!record) return `${name} · no provincial estimate for ${state.labourQuarter}`;
     const period = state.labourData?.periods.find((item) => item.code === state.labourQuarter)?.label ?? state.labourQuarter;
-    return `${name} · ${period} official unemployment rate: ${record.officialRate.toFixed(1)}%`;
+    if (!record) return `${name} · Unemployment data unavailable · ${period} · Stats SA QLFS`;
+    return `${name} · Official unemployment rate: ${record.officialRate.toFixed(1)}% · ${period} · Stats SA QLFS`;
   }
   if (state.mapLayer === "economy") {
-    if (feature.properties.shapeType !== "ADM1") return `${name} · provincial GDP-R values only`;
+    if (feature.properties.shapeType !== "ADM1") return `${name} · Province-level GDP-R only · Stats SA GDP-R P0441.2`;
     const record = state.provincialEconomyData?.records
       .find((item) => item.province === name);
-    if (!record) return `${name} · no GDP-R data for ${state.economyMapYear}`;
-    return `${name} · ${state.economyMapYear} share of national GDP: ${record.gdpContributionPercent.toFixed(1)}% · nominal GDP R${formatCensusNumber(record.gdpCurrentPricesRandMillions)} million`;
+    if (!record) return `${name} · GDP-R data unavailable · ${state.economyMapYear} · Stats SA GDP-R P0441.2`;
+    return `${name} · Share of national GDP: ${record.gdpContributionPercent.toFixed(1)}% · Nominal GDP: R${formatCensusNumber(record.gdpCurrentPricesRandMillions)} million · ${state.economyMapYear} · Stats SA GDP-R P0441.2`;
   }
   const record = censusMapRecordForFeature(feature);
-  if (!record) return `${name} · complete Census municipality coverage unavailable`;
+  if (!record) return `${name} · Census value unavailable · ${state.censusMapYear} · Statistics South Africa Census`;
   const aggregatePrefix = record.aggregated
     ? `${record.municipalityCount} matched municipalities · `
     : "";
@@ -4081,16 +4081,16 @@ function mapTooltip(feature) {
     const growth = record.populationGrowthPercent;
     const method = record.aggregated ? "derived population change" : "reported population growth";
     return Number.isFinite(growth)
-      ? `${name} · ${aggregatePrefix}Census ${method} 2011–2022: ${formatCensusNumber(growth, 1)}%`
-      : `${name} · Census population growth unavailable for 2011–2022`;
+      ? `${name} · ${aggregatePrefix}${method}: ${formatCensusNumber(growth, 1)}% · Census 2011–2022 · Statistics South Africa`
+      : `${name} · Population change unavailable · Census 2011–2022 · Statistics South Africa`;
   }
   if (state.mapLayer === "population") {
-    return `${name} · ${aggregatePrefix}Census ${record.year} population density: ${formatCensusNumber(record.populationDensityPerKm2, 1)} people/km²`;
+    return `${name} · ${aggregatePrefix}Population density: ${formatCensusNumber(record.populationDensityPerKm2, 1)} people/km² · Census ${record.year} · Statistics South Africa`;
   }
   if (state.mapLayer === "electricity") {
-    return `${name} · ${aggregatePrefix}Census ${record.year}: ${formatCensusNumber(record.electricityLightingSharePercent, 1)}% of households reported electricity as their main lighting source`;
+    return `${name} · ${aggregatePrefix}${formatCensusNumber(record.electricityLightingSharePercent, 1)}% of households reported electricity as their main lighting source · Census ${record.year} · Stats SA municipal fact sheet`;
   }
-  return `${name} · ${aggregatePrefix}Census ${record.year} households reporting water scheme: ${formatCensusNumber(record.waterSchemeSharePercent, 1)}%`;
+  return `${name} · ${aggregatePrefix}Households reporting a water-scheme source: ${formatCensusNumber(record.waterSchemeSharePercent, 1)}% · Census ${record.year} · Statistics South Africa`;
 }
 
 function mapTablePresentation() {
@@ -4206,6 +4206,7 @@ function renderMapLegend() {
   if (state.mapLayer === "boundaries") {
     heading.textContent = "BOUNDARY KEY";
     items.innerHTML = '<span><i class="legend-line active-line"></i>Selected municipality</span><span><i class="legend-line"></i>Municipal boundary</span><span class="legend-note">Real geoBoundaries polygons · 2020 vintage</span>';
+    appendNationalBorderLegend(items);
     if (state.censusMapError) {
       const failure = document.createElement("span");
       failure.className = "legend-note";
@@ -4229,6 +4230,7 @@ function renderMapLegend() {
         ? `ELECTRICITY FOR LIGHTING · CENSUS ${state.censusMapYear}`
         : `WATER SCHEME SHARE · CENSUS ${state.censusMapYear}`;
   }
+  appendNationalBorderLegend(items);
   const records = activeMapRecords();
   if (!records.length) {
     const note = document.createElement("span");
@@ -4386,6 +4388,26 @@ function renderMapLegend() {
     sourceLink.textContent = "Open original source ↗";
     items.append(sourceLink);
   }
+}
+
+function appendNationalBorderLegend(items) {
+  if (state.view !== "dashboard" || state.selected) return;
+  const outlineRow = document.createElement("span");
+  outlineRow.className = "legend-border-key";
+  const outline = document.createElement("span");
+  outline.className = "legend-line national-boundary-key";
+  const outlineLabel = document.createElement("span");
+  outlineLabel.textContent = "South Africa outline";
+  outlineRow.append(outline, outlineLabel);
+  const provinceRow = document.createElement("span");
+  provinceRow.className = "legend-border-key";
+  const provinces = document.createElement("span");
+  provinces.className = "legend-line province-boundary-key";
+  const provinceLabel = document.createElement("span");
+  provinceLabel.textContent = "Province borders";
+  provinceRow.append(provinces, provinceLabel);
+  items.prepend(provinceRow);
+  items.prepend(outlineRow);
 }
 
 function setLabourQuarter(quarter) {

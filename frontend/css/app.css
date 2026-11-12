@@ -208,7 +208,7 @@ a { color: inherit; }
 .leaflet-control-attribution { background: #141918d9 !important; color: #75817b !important; font-size: 8px !important; }
 .leaflet-control-attribution a { color: var(--accent-soft) !important; }
 .leaflet-interactive { transition: fill-opacity 120ms ease, stroke 120ms ease; }
-.leaflet-tooltip { padding: 5px 8px !important; border: 1px solid #46534d !important; border-radius: 0 !important; background: #1a211f !important; color: var(--text) !important; box-shadow: 0 4px 10px #0005 !important; font-size: 10px !important; }
+.leaflet-tooltip { max-width: min(300px, 72vw); white-space: normal; padding: 6px 8px !important; border: 1px solid #46534d !important; border-radius: 0 !important; background: #1a211f !important; color: var(--text) !important; box-shadow: 0 4px 10px #0005 !important; font-size: 10px !important; line-height: 1.45; }
 .leaflet-tooltip::before { border-top-color: #46534d !important; }
 .map-overlay { position: absolute; z-index: 500; border: 1px solid rgba(59, 72, 66, .84); background: rgba(20, 26, 24, .93); color: #a9b4af; box-shadow: 0 3px 8px #0003; }
 .map-top-left { top: 12px; left: 12px; display: flex; align-items: center; gap: 11px; padding: 6px 8px; }
@@ -249,6 +249,10 @@ a { color: inherit; }
 .map-legend-items .legend-note { line-height: 1.4; overflow-wrap: anywhere; }
 .legend-line { display: inline-block; width: 14px; margin-right: 7px; border-top: 1px solid #82918a; vertical-align: 2px; }
 .legend-line.active-line { border-top: 2px solid var(--accent); }
+.legend-border-key { display: flex; align-items: center; gap: 5px; color: #aab5af; }
+.legend-border-key .legend-line { flex: 0 0 20px; width: 20px; margin: 0; vertical-align: middle; }
+.legend-border-key .national-boundary-key { border-top: 3px solid #57c7c1; }
+.legend-border-key .province-boundary-key { height: 2px; border: 0; background: linear-gradient(90deg, #78a99a, #b99568, #7d9ab5, #ae986d, #93aa70, #b07f98, #68a0a8, #c78462, #8e9c83); }
 .legend-note { margin-top: 2px; color: #75817b; font-size: 8px; }
 .map-loading, .map-error { position: absolute; inset: 0; z-index: 800; display: flex; align-items: center; justify-content: center; gap: 9px; background: rgba(16, 20, 19, .84); color: #adb8b3; font-size: 11px; }
 .map-error { padding: 20px; color: #d29a93; text-align: center; }
