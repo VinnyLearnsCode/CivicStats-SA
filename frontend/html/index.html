@@ -140,10 +140,17 @@
               </div>
               <div class="map-wrap">
                 <div id="map" role="application" aria-label="Interactive map of South Africa" aria-describedby="map-keyboard-instructions"></div>
+                <div class="map-hover-compare" id="map-hover-compare" hidden>
+                  <span class="map-hover-place" id="map-hover-compare-name"></span>
+                  <button type="button" class="map-tooltip-compare" id="map-hover-compare-button">Add to Comparisons →</button>
+                </div>
                 <span class="visually-hidden" id="map-keyboard-instructions">Map areas are keyboard accessible. Press Tab to focus an area, use arrow keys to move through areas alphabetically, Home or End to jump to the first or last area, and Enter or Space to select or compare the focused area.</span>
                 <div class="map-overlay map-top-left">
                   <span class="map-coordinate" id="map-location">SOUTH AFRICA · 9 PROVINCES</span>
                   <span class="map-scale">1 : <span id="map-scale">—</span></span>
+                  <div class="map-zoom-path" id="map-zoom-path" role="status" aria-label="Current map detail: Province">
+                    <span data-zoom-level="national">South Africa</span><i aria-hidden="true">›</i><span data-zoom-level="ADM1">Province</span><i aria-hidden="true">›</i><span data-zoom-level="ADM2">District / metro</span><i aria-hidden="true">›</i><span data-zoom-level="ADM3">Municipality</span>
+                  </div>
                 </div>
                 <div class="map-overlay layer-control">
                   <span class="control-title">MAP LAYER</span>
@@ -306,7 +313,10 @@
               </div>
               <div class="profile-period"><span class="status-dot muted" id="profile-status-dot"></span><span id="profile-indicator-status">LOADING VERIFIED INDICATORS</span><span class="period-spacer"></span><span id="profile-indicator-period">—</span></div>
               <div class="geography-children" id="geography-children" hidden></div>
-              <button class="action-button open-profile-button" id="open-municipality-profile" type="button" disabled>Open Municipality Profile ↗</button>
+              <div class="profile-action-row">
+                <button class="action-button open-profile-button" id="open-municipality-profile" type="button" disabled>Open Municipality Profile ↗</button>
+                <button class="action-button" id="compare-profile-place" type="button" disabled>Add to Comparisons</button>
+              </div>
             </section>
 
             <section class="panel source-panel">

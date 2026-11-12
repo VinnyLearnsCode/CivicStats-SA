@@ -78,6 +78,7 @@ const state = {
   nationalProvinceBordersLayer: null,
   nationalOutlineLayer: null,
   nationalOutlineCollection: null,
+  hoveredMapGeographyId: null,
   nationalBounds: null,
   mapResizeObserver: null,
   map: null,
@@ -3469,6 +3470,8 @@ function updateProfile(selected) {
     : "Spherical GeoJSON calculation · approximate";
   updateBreadcrumb();
   document.querySelector("#open-municipality-profile").disabled = selected.level !== "ADM3";
+  document.querySelector("#compare-profile-place").disabled = selected.level !== "ADM3";
+  updateMapZoomPath();
   void renderGeographyChildren(selected);
   renderDetail();
   updatePageHeading();
@@ -3589,7 +3592,9 @@ function updateNationalProfileSummary() {
   document.querySelector("#source-indicator-label").textContent = hasData ? "NATIONAL SOURCES" : "LOADING SOURCES";
   document.querySelector("#source-summary-note").textContent = "National Census population, provincial QLFS range and mapped administrative coverage.";
   document.querySelector("#open-municipality-profile").disabled = true;
+  document.querySelector("#compare-profile-place").disabled = true;
   updateBreadcrumb();
+  updateMapZoomPath();
 
   if (!state.nationalCensusPopulation2022 && !state.nationalCensusPopulationLoading && !state.nationalCensusPopulationError) {
     state.nationalCensusPopulationLoading = true;
@@ -3613,6 +3618,7 @@ function clearGeographySelection() {
   document.querySelector("#geography-children").hidden = true;
   document.querySelector("#geography-children").replaceChildren();
   document.querySelector("#map-location").textContent = "SOUTH AFRICA · 9 PROVINCES";
+  updateMapZoomPath();
   renderDetail();
   updatePageHeading();
   refreshMapStyles();
@@ -4091,6 +4097,41 @@ function mapTooltip(feature) {
     return `${name} · ${aggregatePrefix}${formatCensusNumber(record.electricityLightingSharePercent, 1)}% of households reported electricity as their main lighting source · Census ${record.year} · Stats SA municipal fact sheet`;
   }
   return `${name} · ${aggregatePrefix}Households reporting a water-scheme source: ${formatCensusNumber(record.waterSchemeSharePercent, 1)}% · Census ${record.year} · Statistics South Africa`;
+}
+
+function updateMapZoomPath() {
+  const path = document.querySelector("#map-zoom-path");
+  if (!path) return;
+  const level = state.boundaryLevel ?? "ADM1";
+  const currentLabel = level === "ADM3" ? "Municipality" : level === "ADM2" ? "District or metro" : "Province";
+  path.setAttribute("aria-label", `Current map detail: ${currentLabel}`);
+  path.querySelectorAll("[data-zoom-level]").forEach((step) => {
+    if (step.dataset.zoomLevel === level) step.setAttribute("aria-current", "step");
+    else step.removeAttribute("aria-current");
+  });
+}
+
+function showMapHoverComparison(feature, event) {
+  const action = document.querySelector("#map-hover-compare");
+  if (!action) return;
+  if (feature.properties.shapeType !== "ADM3") {
+    action.hidden = true;
+    state.hoveredMapGeographyId = null;
+    return;
+  }
+  state.hoveredMapGeographyId = feature.properties.shapeID;
+  const name = feature.properties.shapeName;
+  document.querySelector("#map-hover-compare-name").textContent = name;
+  document.querySelector("#map-hover-compare-button").setAttribute("aria-label", `Start a comparison with ${name}`);
+  action.hidden = false;
+  const size = state.map?.getSize();
+  const point = event?.containerPoint;
+  if (!size || !point) return;
+  const { offsetWidth: width, offsetHeight: height } = action;
+  const left = Math.max(8, Math.min(point.x + 14, size.x - width - 8));
+  const top = Math.max(48, Math.min(point.y + 14, size.y - height - 8));
+  action.style.left = `${left}px`;
+  action.style.top = `${top}px`;
 }
 
 function mapTablePresentation() {
@@ -4795,14 +4836,17 @@ function handleMapRegionKeydown(layer, event) {
 }
 
 function setMapLayer(collection, { fitBounds = true } = {}) {
+  document.querySelector("#map-hover-compare").hidden = true;
+  state.hoveredMapGeographyId = null;
   if (state.boundaryLayer) state.map.removeLayer(state.boundaryLayer);
   state.boundaryLayer = L.geoJSON(collection, {
     style: styleForFeature,
     onEachFeature: (feature, layer) => {
       layer.bindTooltip(mapTooltip(feature), { sticky: true, direction: "top" });
       layer.on({
-        mouseover: () => {
+        mouseover: (event) => {
           layer.setTooltipContent(mapTooltip(feature));
+          showMapHoverComparison(feature, event);
           if (feature.properties.shapeID !== state.selected?.id && !isComparisonSelection(feature)) {
             layer.setStyle({
               ...mapStyle(feature),
@@ -4821,6 +4865,7 @@ function setMapLayer(collection, { fitBounds = true } = {}) {
   document.querySelector("#boundary-count").textContent =
     `${collection.features.length} ${state.boundaryLevel === "ADM1" ? "provinces" : state.boundaryLevel === "ADM2" ? "districts & metros" : "municipal boundaries"}`;
   updateMapLayerControls();
+  updateMapZoomPath();
   renderMapLegend();
   updateMapRegionAccessibility();
   if (state.mapDataTableOpen) renderMapDataTable();
@@ -4990,6 +5035,18 @@ function toggleMapComparison(id) {
     state.comparisonSelections.push(id);
   }
   refreshMapStyles();
+  renderMapComparisonSelection();
+}
+
+function openComparisonWithMunicipality(id) {
+  const municipality = state.municipalities.find((item) => item.id === id);
+  if (!municipality) {
+    showToast("This place is not available in the municipality comparison directory.");
+    return;
+  }
+  state.comparisonMode = false;
+  state.comparisonSelections = [id];
+  setView("comparisons");
   renderMapComparisonSelection();
 }
 
@@ -5928,6 +5985,13 @@ function updateActiveSearchResult(index) {
 }
 
 function bindEvents() {
+  document.querySelector(".map-wrap").addEventListener("pointerleave", () => {
+    document.querySelector("#map-hover-compare").hidden = true;
+    state.hoveredMapGeographyId = null;
+  });
+  document.querySelector("#map-hover-compare-button").addEventListener("click", () => {
+    if (state.hoveredMapGeographyId) openComparisonWithMunicipality(state.hoveredMapGeographyId);
+  });
   document.querySelectorAll(".nav-link[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
       if (button.dataset.view === "dashboard") {
@@ -6116,6 +6180,10 @@ function bindEvents() {
     url.hash = "dashboard";
     location.assign(url.href);
   });
+  document.querySelector("#compare-profile-place").addEventListener("click", () => {
+    if (state.selected?.level !== "ADM3") return;
+    openComparisonWithMunicipality(state.selected.id);
+  });
   document.querySelector("#breadcrumbs").addEventListener("click", (event) => {
     const button = event.target.closest(".crumb-button");
     if (!button) return;
@@ -6237,6 +6305,7 @@ async function initialize() {
     renderNationalMetrics();
     setMapLayer(startupCollection);
     renderMapComparisonSelection();
+    syncBoundaryLevelToZoom();
     document.querySelector("#map-loading").hidden = true;
     document.querySelector("#boundary-count").textContent =
       `${startupCollection.features.length} ${state.boundaryLevel === "ADM1" ? "provinces" : state.boundaryLevel === "ADM2" ? "districts & metros" : "municipal boundaries"}`;
