@@ -222,6 +222,7 @@ a { color: inherit; }
 .leaflet-tooltip { max-width: min(300px, 72vw); white-space: normal; padding: 6px 8px !important; border: 1px solid #46534d !important; border-radius: 0 !important; background: #1a211f !important; color: var(--text) !important; box-shadow: 0 4px 10px #0005 !important; font-size: 10px !important; line-height: 1.45; }
 .leaflet-tooltip::before { border-top-color: #46534d !important; }
 .map-tooltip-card { display: grid; min-width: 170px; gap: 3px; }
+.map-tooltip-state { width: fit-content; margin-bottom: 2px; color: var(--accent-soft); font: 7px var(--mono); letter-spacing: .1em; }
 .map-tooltip-place { color: var(--text); font-size: 10px; }
 .map-tooltip-indicator { color: #aab5af; font-size: 9px; }
 .map-tooltip-value { color: var(--accent); font-size: 11px; font-weight: 600; }

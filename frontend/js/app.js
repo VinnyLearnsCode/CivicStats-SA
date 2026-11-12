@@ -3451,6 +3451,7 @@ function renderProjectRecords(parent, result, typeSelect) {
 function updateProfile(selected) {
   state.selected = selected;
   if (!selected) return;
+  document.querySelector("#fit-map").hidden = false;
   profileName.textContent = selected.name;
   const location = [selected.province, selected.district]
     .filter((name, index, list) => name && name !== selected.name && list.indexOf(name) === index)
@@ -3619,6 +3620,7 @@ function updateNationalProfileSummary() {
 
 function clearGeographySelection() {
   state.selected = null;
+  document.querySelector("#fit-map").hidden = true;
   setMobileProfileOpen(false);
   state.profileSummaryRequestId += 1;
   updateNationalProfileSummary();
@@ -4156,10 +4158,14 @@ function mapTooltipData(feature) {
   return { place: name, indicator: indicators[state.mapLayer] ?? "Census indicator", value, period, source, note };
 }
 
-function mapTooltip(feature) {
+function mapTooltip(feature, { stateLabel = "PREVIEW" } = {}) {
   const data = mapTooltipData(feature);
   const tooltip = document.createElement("div");
   tooltip.className = "map-tooltip-card";
+  const stateBadge = document.createElement("span");
+  stateBadge.className = "map-tooltip-state";
+  stateBadge.textContent = stateLabel;
+  tooltip.append(stateBadge);
   const place = document.createElement("strong");
   place.className = "map-tooltip-place";
   place.textContent = data.place;
@@ -4203,7 +4209,7 @@ function pinMapIndicatorDetail(feature) {
   const panel = document.querySelector("#map-pinned-detail");
   const content = document.querySelector("#map-pinned-detail-content");
   if (!panel || !content) return;
-  content.replaceChildren(mapTooltip(feature));
+  content.replaceChildren(mapTooltip(feature, { stateLabel: "SELECTED" }));
   panel.hidden = false;
   document.querySelector(".map-wrap")?.classList.add("has-pinned-detail");
 }
