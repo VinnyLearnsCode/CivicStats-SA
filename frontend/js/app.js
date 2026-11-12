@@ -4052,25 +4052,16 @@ function appendMapCoverage(items) {
 }
 
 function mapIndicatorBreaks() {
-  const valueKey = state.mapLayer === "unemployment"
-    ? "officialRate"
-    : state.mapLayer === "economy"
-      ? "gdpContributionPercent"
-      : state.mapLayer === "population"
-        ? "populationDensityPerKm2"
-        : state.mapLayer === "growth"
-          ? "populationGrowthPercent"
-          : state.mapLayer === "electricity"
-            ? "electricityLightingSharePercent"
-            : "waterSchemeSharePercent";
-  const values = activeMapRecords()
-    .map((record) => record[valueKey])
-    .filter((value) => typeof value === "number" && Number.isFinite(value))
-    .sort((left, right) => left - right);
-  if (!values.length) return [];
-  return Array.from({ length: 4 }, (_, index) =>
-    values[Math.ceil(((index + 1) * values.length) / 5) - 1]
-  );
+  // Keep map colors comparable when users switch boundary levels or periods.
+  const fixedBreaks = {
+    population: [10, 50, 250, 1000],
+    growth: [-10, 0, 10, 25],
+    unemployment: [15, 20, 25, 30],
+    economy: [5, 10, 15, 20],
+    electricity: [20, 40, 60, 80],
+    water: [20, 40, 60, 80]
+  };
+  return fixedBreaks[state.mapLayer] ?? [];
 }
 
 function mapStyle(feature) {
@@ -4541,8 +4532,7 @@ function renderMapLegend() {
     const upper = breaks[index] ?? values.at(-1);
     const precision = 1;
     const suffix = state.mapLayer === "population" ? " people/km²" : "%";
-    const band = index === 0 ? "Lowest" : index === colors.length - 1 ? "Highest" : "";
-    const label = band ? `Band ${index + 1} · ${band}` : `Band ${index + 1}`;
+    const label = `Band ${index + 1}`;
     if (index === 0) {
       range.textContent = `${label}: ≤ ${formatCensusNumber(upper, precision)}${suffix}`;
     } else if (index === colors.length - 1) {
@@ -4604,7 +4594,7 @@ function renderMapLegend() {
   interpretationNote.textContent = interpretation;
   const scaleNote = document.createElement("span");
   scaleNote.className = "legend-note";
-  scaleNote.textContent = "Green shows lower values; orange shows higher values within the areas shown. Higher does not always mean better—read the indicator note and units. Bands are recalculated for the displayed areas.";
+  scaleNote.textContent = "The same value ranges and colors apply at every boundary level. Higher means more of this indicator, not necessarily a better result.";
   const missingLabel = "No verified value · hatched gray";
   const note = document.createElement("span");
   note.className = "legend-note";

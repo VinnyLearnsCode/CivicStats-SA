@@ -242,6 +242,8 @@ a { color: inherit; }
 .layer-control-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .layer-control-heading .control-title { margin-bottom: 6px; }
 .layer-control-toggle { display: none; }
+.layer-group + .layer-group { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-soft); }
+.layer-group-heading { margin: 2px 0 4px; color: #718078; font: 7px var(--mono); letter-spacing: .07em; }
 .control-title, .legend-heading { display: block; margin-bottom: 6px; color: #85918b; font: 8px var(--mono); letter-spacing: .08em; }
 .map-period-label { display: flex; align-items: center; justify-content: space-between; margin: 3px 0 6px; color: #85918b; font: 7px var(--mono); letter-spacing: .06em; }
 .map-period-label select { min-width: 62px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 0; background: #202725; color: var(--text); font: 8px var(--mono); }
