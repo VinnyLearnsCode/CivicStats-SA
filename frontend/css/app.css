@@ -918,6 +918,29 @@ body { font-size: 14px; line-height: 1.5; }
   .map-display-modes button, .map-hover-preview-setting { min-height: 42px; }
 }
 
+/* Improve the contrast and legibility of secondary information throughout the dashboard. */
+:root { --muted: #aab5af; --dim: #87938d; }
+body { font-size: 15px; }
+.legend-note,
+.layer-coverage,
+.map-layer-help,
+.map-tooltip-row,
+.map-tooltip-note,
+.source-summary p,
+.census-provenance > p,
+.source-checked-at,
+.publication-item p,
+.compare-series-period-source,
+.compare-series-context details,
+.compare-series-difference,
+.statusbar { font-size: 10px; line-height: 1.5; }
+.layer-group-heading,
+.map-period-label,
+.layer-state,
+.map-coverage-status,
+.map-legend-toggle,
+.map-tooltip-key { color: #a0aca5; font-size: 9px; }
+
 .retry-button { margin-top: 9px; }
 .empty-data .retry-button { align-self: flex-start; }
 .map-legend-items > .retry-button { align-self: flex-start; }
