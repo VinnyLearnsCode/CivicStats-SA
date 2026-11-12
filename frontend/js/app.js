@@ -4594,8 +4594,27 @@ function renderMapLegend() {
   interpretationNote.textContent = interpretation;
   const scaleNote = document.createElement("span");
   scaleNote.className = "legend-note";
-  scaleNote.textContent = "The same value ranges and colors apply at every boundary level. Higher means more of this indicator, not necessarily a better result.";
-  const missingLabel = "No verified value · hatched gray";
+  scaleNote.textContent = state.mapLayer === "unemployment"
+    ? "Same ranges at every boundary level. Higher means more people in the labour force are unemployed; that indicates a worse employment outcome."
+    : state.mapLayer === "economy"
+      ? "Same ranges at every boundary level. Higher means a larger share of national GDP-R, not higher income per person."
+      : state.mapLayer === "growth"
+        ? "Same ranges at every boundary level. Higher means faster population change; negative values indicate population decline."
+        : state.mapLayer === "population"
+          ? "Same ranges at every boundary level. Higher means more residents per km², not a larger total population."
+          : state.mapLayer === "electricity"
+            ? "Same ranges at every boundary level. Higher means more households report electricity as their main lighting source; it does not measure outages."
+            : "Same ranges at every boundary level. Higher means more households report a water scheme as their source; it does not measure water quality or reliability.";
+  const missingLabel = state.mapLayer === "unemployment" || state.mapLayer === "economy"
+    ? "No value at this level · province data only · hatched gray"
+    : "No verified value in source or matched records · hatched gray";
+  const coverageNote = document.createElement("span");
+  coverageNote.className = "legend-note";
+  coverageNote.textContent = state.mapLayer === "unemployment"
+    ? "Coverage: Stats SA publishes this measure for provinces only. Use the province map for verified values; district and municipality areas are intentionally unscored."
+    : state.mapLayer === "economy"
+      ? "Coverage: GDP-R is published at province level only. Use the province map for verified values; district and municipality areas are intentionally unscored."
+      : "Coverage: verified source records are municipal. District and province values are derived from matched municipal records; hatched areas have no usable verified value.";
   const note = document.createElement("span");
   note.className = "legend-note";
   const aggregateNote = state.boundaryLevel === "ADM3" || ["boundaries", "unemployment", "economy"].includes(state.mapLayer)
@@ -4611,7 +4630,7 @@ function renderMapLegend() {
     ? " Municipality membership is crosswalked by representative point to geoBoundaries 2020 polygons; parent-area results are derived, not official Stats SA tabulations."
     : "";
   note.textContent = `${layerMetadata.detail} ${layerMetadata.updated}.${aggregateNote}${geographyNote} Hatched gray indicates no verified value for the selected indicator.`;
-  items.append(interpretationNote, scaleNote);
+  items.append(interpretationNote, scaleNote, coverageNote);
   appendMissingMapLegendEntry(items, missingLabel);
   items.append(note);
   if (layerMetadata.url) {
