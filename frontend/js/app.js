@@ -5504,13 +5504,14 @@ function renderComparison() {
     ).join("")}</tr>`
   ).join("");
   return `<div class="compare-controls">${selectFields}<div class="view-actions"><button class="action-button" id="compare-export" disabled title="Export source-linked Census indicators for the selected municipalities">Export comparison data</button><button class="action-button" id="compare-share" disabled title="Copy a link that opens this municipality comparison">Copy comparison link</button></div></div>
-    <h3 class="comparison-subheading">Available geographic metadata</h3>
-    <p class="compare-scroll-note">Swipe horizontally to view each selected municipality.</p>
-    <div class="data-table-wrap compare-metadata-wrap"><table class="data-table compare-table"><thead><tr><th>Property</th><th data-compare-heading="0">Geography 1</th><th data-compare-heading="1">Geography 2</th><th data-compare-heading="2">Geography 3</th></tr></thead><tbody>${metadataRows}</tbody></table></div>
-    <h3 class="comparison-subheading">Census population &amp; households · 2011 and 2022</h3>
-    <p class="source-check-note" id="compare-census-note">Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.</p>
-    <div class="compare-mobile-data" id="compare-mobile-data" aria-live="polite"></div>
-    <div class="data-table-wrap compare-census-wrap"><table class="data-table compare-table" id="compare-census-table"><thead><tr><th>Indicator</th><th data-indicator-heading="0">Geography 1</th><th data-indicator-heading="1">Geography 2</th><th data-indicator-heading="2">Geography 3</th></tr></thead><tbody>${indicatorRows}</tbody></table></div>`;
+    <section class="compare-results" aria-labelledby="compare-results-title">
+      <header class="compare-results-heading"><div><span class="panel-kicker">SIDE-BY-SIDE RESULTS</span><h3 id="compare-results-title">Census population &amp; household indicators</h3></div><span class="compare-results-period">CENSUS · 2011 / 2022</span></header>
+      <p class="compare-scroll-note">Swipe horizontally to view places side by side. Select another municipality above to add its figures.</p>
+      <p class="source-check-note" id="compare-census-note">Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.</p>
+      <div class="compare-mobile-data" id="compare-mobile-data" aria-live="polite"></div>
+      <div class="data-table-wrap compare-census-wrap"><table class="data-table compare-table" id="compare-census-table"><thead><tr><th>Indicator</th><th data-indicator-heading="0">Geography 1</th><th data-indicator-heading="1">Geography 2</th><th data-indicator-heading="2">Geography 3</th></tr></thead><tbody>${indicatorRows}</tbody></table></div>
+    </section>
+    <details class="compare-metadata-details"><summary>Geographic details</summary><p class="compare-scroll-note">Boundary metadata for the selected places.</p><div class="data-table-wrap compare-metadata-wrap"><table class="data-table compare-table"><thead><tr><th>Property</th><th data-compare-heading="0">Geography 1</th><th data-compare-heading="1">Geography 2</th><th data-compare-heading="2">Geography 3</th></tr></thead><tbody>${metadataRows}</tbody></table></div></details>`;
 }
 
 function renderAlternateView() {
