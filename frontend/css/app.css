@@ -1026,3 +1026,16 @@ body { font-size: 15px; }
 .legend-heading { font-size: 11px !important; }
 .compare-series-line,
 .compare-series-line > strong { font-size: 11px !important; }
+
+/* Teal marks source names and links; labels and caveats stay neutral. */
+.legend-source-link,
+.census-provenance > a,
+.source-card a,
+.finance-source-note a,
+.source-check-note a,
+.map-tooltip-row:last-child .map-tooltip-detail { color: #72e0d7 !important; }
+.summary-card .summary-source,
+.national-trend-source,
+.compare-series-period-source { color: #72e0d7 !important; }
+.source-label,
+.map-tooltip-key { color: #b0bbb5 !important; }
