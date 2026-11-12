@@ -4205,6 +4205,13 @@ function pinMapIndicatorDetail(feature) {
   if (!panel || !content) return;
   content.replaceChildren(mapTooltip(feature));
   panel.hidden = false;
+  requestAnimationFrame(() => {
+    const bounds = panel.getBoundingClientRect();
+    if (bounds.bottom > window.innerHeight || bounds.top < 0) {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      panel.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
+    }
+  });
 }
 
 function closeMapPinnedDetail() {
