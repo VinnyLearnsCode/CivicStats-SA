@@ -3488,7 +3488,7 @@ function updateProfile(selected) {
   if (state.boundaryLayer) {
     state.boundaryLayer.eachLayer((layer) => {
       const isSelected = layer.feature.properties.shapeID === selected.id;
-      layer.setStyle(isSelected ? selectedStyle() : mapStyle(layer.feature));
+      layer.setStyle(isSelected ? selectedStyle(layer.feature) : mapStyle(layer.feature));
       if (isSelected && state.boundaryLevel !== "ADM1") layer.bringToFront();
     });
     refreshSelectionLayer();
@@ -3792,8 +3792,15 @@ function baseStyle(feature) {
   };
 }
 
-function selectedStyle() {
-  return { color: "#eafffb", weight: 3, opacity: 1, fillColor: "#29b6ad", fillOpacity: 0.48 };
+function selectedStyle(feature) {
+  const missingValue = feature && state.mapLayer !== "boundaries" && mapIndicatorValue(feature) === null;
+  return {
+    color: "#eafffb",
+    weight: 3,
+    opacity: 1,
+    fillColor: missingValue ? "url(#civicstats-map-no-data-pattern)" : "#29b6ad",
+    fillOpacity: missingValue ? 1 : 0.48
+  };
 }
 
 function comparisonStyle() {
@@ -3805,7 +3812,7 @@ function isComparisonSelection(feature) {
 }
 
 function styleForFeature(feature) {
-  if (feature.properties.shapeID === state.selected?.id) return selectedStyle();
+  if (feature.properties.shapeID === state.selected?.id) return selectedStyle(feature);
   if (isComparisonSelection(feature)) return comparisonStyle();
   return mapStyle(feature);
 }
@@ -4055,7 +4062,7 @@ function mapStyle(feature) {
   if (state.mapLayer === "boundaries") return style;
   const value = mapIndicatorValue(feature);
   if (value === null) {
-    return { ...style, color: "#59645e", fillColor: "#303936", fillOpacity: 0.58 };
+    return { ...style, color: "#87938d", fillColor: "url(#civicstats-map-no-data-pattern)", fillOpacity: 1 };
   }
   const breaks = mapIndicatorBreaks();
   const colors = ["#29463d", "#3c6252", "#61836a", "#9d9861", "#c1814f"];
@@ -4066,6 +4073,30 @@ function mapStyle(feature) {
     fillColor: colors[colorIndex < 0 ? colors.length - 1 : colorIndex],
     fillOpacity: 0.72
   };
+}
+
+function ensureNoDataMapPattern() {
+  const svg = state.boundaryLayer?.getLayers()[0]?.getElement()?.ownerSVGElement;
+  if (!svg || svg.querySelector("#civicstats-map-no-data-pattern")) return;
+  const namespace = "http://www.w3.org/2000/svg";
+  const defs = document.createElementNS(namespace, "defs");
+  const pattern = document.createElementNS(namespace, "pattern");
+  pattern.setAttribute("id", "civicstats-map-no-data-pattern");
+  pattern.setAttribute("patternUnits", "userSpaceOnUse");
+  pattern.setAttribute("width", "8");
+  pattern.setAttribute("height", "8");
+  const background = document.createElementNS(namespace, "rect");
+  background.setAttribute("width", "8");
+  background.setAttribute("height", "8");
+  background.setAttribute("fill", "#303936");
+  const hatch = document.createElementNS(namespace, "path");
+  hatch.setAttribute("d", "M-2 2 L2 -2 M0 8 L8 0 M6 10 L10 6");
+  hatch.setAttribute("fill", "none");
+  hatch.setAttribute("stroke", "#87938d");
+  hatch.setAttribute("stroke-width", "1");
+  pattern.append(background, hatch);
+  defs.append(pattern);
+  svg.prepend(defs);
 }
 
 function mapTooltipData(feature) {
@@ -4367,7 +4398,7 @@ function exportMapDataTable() {
   showToast("Displayed map table downloaded as CSV.");
 }
 
-function appendMissingMapLegendEntry(items, label = "No compatible source value · neutral gray") {
+function appendMissingMapLegendEntry(items, label = "No verified value · hatched gray") {
   const row = document.createElement("span");
   row.className = "map-legend-range";
   const swatch = document.createElement("i");
@@ -4435,7 +4466,7 @@ function renderMapLegend() {
           : "Census map values are unavailable.";
     }
     items.append(note);
-    appendMissingMapLegendEntry(items, "No compatible values · map fill is neutral gray");
+    appendMissingMapLegendEntry(items, "No verified data · hatched gray");
     const failed = state.mapLayer === "unemployment" ? Boolean(state.labourMapError)
       : state.mapLayer === "economy" ? Boolean(state.economyMapError)
         : Boolean(state.censusMapError);
@@ -4463,7 +4494,7 @@ function renderMapLegend() {
     note.className = "legend-note";
     note.textContent = "No compatible indicator values are available for these areas.";
     items.append(note);
-    appendMissingMapLegendEntry(items, "No compatible values · map fill is neutral gray");
+    appendMissingMapLegendEntry(items, "No verified data · hatched gray");
     return;
   }
   const breaks = mapIndicatorBreaks();
@@ -4557,7 +4588,7 @@ function renderMapLegend() {
   const scaleNote = document.createElement("span");
   scaleNote.className = "legend-note";
   scaleNote.textContent = "Green shows lower values; orange shows higher values within the areas shown. Higher does not always mean better—read the indicator note and units. Bands are recalculated for the displayed areas.";
-  const missingLabel = "No compatible source value · neutral gray";
+  const missingLabel = "No verified value · hatched gray";
   const note = document.createElement("span");
   note.className = "legend-note";
   const aggregateNote = state.boundaryLevel === "ADM3" || ["boundaries", "unemployment", "economy"].includes(state.mapLayer)
@@ -4572,7 +4603,7 @@ function renderMapLegend() {
   const geographyNote = aggregateNote
     ? " Municipality membership is crosswalked by representative point to geoBoundaries 2020 polygons; parent-area results are derived, not official Stats SA tabulations."
     : "";
-  note.textContent = `${layerMetadata.detail} ${layerMetadata.updated}.${aggregateNote}${geographyNote} Neutral fill indicates missing data.`;
+  note.textContent = `${layerMetadata.detail} ${layerMetadata.updated}.${aggregateNote}${geographyNote} Hatched gray indicates no verified value for the selected indicator.`;
   items.append(interpretationNote, scaleNote);
   appendMissingMapLegendEntry(items, missingLabel);
   items.append(note);
@@ -4841,6 +4872,7 @@ function updateMapLayerControls() {
 
 function refreshMapStyles() {
   state.boundaryLayer?.setStyle(styleForFeature);
+  ensureNoDataMapPattern();
   refreshSelectionLayer();
   renderMapLegend();
   updateMapLayerControls();
@@ -5070,6 +5102,7 @@ function setMapLayer(collection, { fitBounds = true } = {}) {
       });
     }
   }).addTo(state.map);
+  ensureNoDataMapPattern();
   document.querySelector("#boundary-count").textContent =
     `${collection.features.length} ${state.boundaryLevel === "ADM1" ? "provinces" : state.boundaryLevel === "ADM2" ? "districts & metros" : "municipal boundaries"}`;
   updateMapLayerControls();

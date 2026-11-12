@@ -281,7 +281,7 @@ a { color: inherit; }
 .map-legend-direction { display: grid; grid-template-columns: max-content minmax(35px, 1fr) max-content; align-items: center; gap: 7px; color: #8c9992; font: 7px var(--mono); }
 .map-legend-gradient { height: 7px; border: 1px solid #718079; }
 .map-legend-swatch { display: inline-block; width: 10px; height: 8px; border: 1px solid #718079; }
-.missing-swatch { background: #303936; }
+.missing-swatch { background: repeating-linear-gradient(135deg, #303936 0 3px, #87938d 3px 4px); }
 .legend-source-link { color: var(--accent-soft); font-size: 8px; text-decoration: none; }
 .legend-source-link:hover { color: var(--accent); text-decoration: underline; }
 .map-legend[open] .map-legend-summary { border-bottom: 1px solid var(--border-soft); }
