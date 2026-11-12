@@ -543,7 +543,10 @@ a { color: inherit; }
 .compare-series-track.signed::before { position: absolute; top: 0; bottom: 0; left: 50%; z-index: 1; width: 1px; background: #8199a2; content: ""; }
 .compare-series-track > .compare-series-fill { position: absolute; top: 0; bottom: 0; left: 0; background: #52a9d2; }
 .compare-series-track > .compare-series-fill.negative { background: #8099ac; }
-.compare-series-line > strong { min-width: 65px; color: #e0e9ed; font: 9px var(--mono); text-align: right; }
+.compare-series-track[hidden] { display: none; }
+.compare-series-amount { display: grid; grid-column: 3; justify-items: end; gap: 2px; }
+.compare-series-amount > strong { min-width: 65px; color: #e0e9ed; font: 9px var(--mono); text-align: right; }
+.compare-series-difference { color: #8ac4df; font: 7px var(--mono); text-align: right; white-space: nowrap; }
 .compare-metadata-details { margin-top: 13px; border-top: 1px solid rgba(82, 169, 210, .28); }
 .compare-metadata-details > summary { padding: 10px 2px; color: #8bbbd0; cursor: pointer; font-size: 10px; list-style-position: inside; }
 .compare-metadata-details .data-table-wrap { margin-top: 0; }

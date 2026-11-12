@@ -66,6 +66,9 @@ const state = {
   profileSummaryRequestId: 0,
   comparisonRequestId: 0,
   comparisonErrors: new Map(),
+  comparisonScales: null,
+  comparisonScalesPromise: null,
+  comparisonScalesError: false,
   collections: new Map(),
   geographies: [],
   comparisonMode: false,
@@ -5579,6 +5582,70 @@ function renderSourceCoverageSummary() {
   </section>`;
 }
 
+async function loadComparisonScaleDomains() {
+  if (state.comparisonScales) return state.comparisonScales;
+  if (state.comparisonScalesPromise) return state.comparisonScalesPromise;
+  state.comparisonScalesPromise = (async () => {
+    const [peopleText, ageText, housingText, electricityText] = await Promise.all([
+      getStaticText("assets/data/person-indicators-muni.csv"),
+      getStaticText("assets/data/age-distribution-muni.csv"),
+      getStaticText("assets/data/housing-info-muni.csv"),
+      getStaticText("assets/data/electricity-lighting-muni.csv")
+    ]);
+    const people = parseBundledCsv(peopleText, "person-indicators-muni.csv");
+    const ages = new Map(parseBundledCsv(ageText, "age-distribution-muni.csv").map((record) => [record.muni_code, record]));
+    const housing = new Map(parseBundledCsv(housingText, "housing-info-muni.csv").map((record) => [record.muni_code, record]));
+    const electricity = new Map(parseBundledCsv(electricityText, "electricity-lighting-muni.csv").map((record) => [record.muni_code, record]));
+    if (new Set(people.map((record) => record.muni_code)).size !== 213 ||
+      ages.size !== 213 || housing.size !== 213 || electricity.size !== 213) {
+      throw new Error("Full-coverage Census scales require complete, unique source rows for all 213 municipalities.");
+    }
+    const share = (count, households) => Number.isFinite(count) && Number.isFinite(households) && households > 0
+      ? count / households * 100
+      : null;
+    const metrics = people.map((record) => {
+      const age = ages.get(record.muni_code);
+      const home = housing.get(record.muni_code);
+      const light = electricity.get(record.muni_code);
+      if (!age || !home || !light || age.name !== record.name || home.name !== record.name || light.name !== record.name) {
+        throw new Error(`Census scale source rows do not match for municipality code ${record.muni_code}.`);
+      }
+      return {
+        total_pop_2011: record.total_pop_2011,
+        total_pop_2022: record.total_pop_2022,
+        growth_rate_2011_to_2022: record.growth_rate_2011_to_2022,
+        households_2011: home.households_2011,
+        households_2022: home.households_2022,
+        avg_household_size_2022: home.avg_household_size_2022,
+        water_scheme_share_2022: share(home.water_scheme_2022, home.households_2022),
+        flush_toilet_share_2022: share(home.flush_toilet_2022, home.households_2022),
+        electricity_cooking_share_2022: share(home.electricity_cooking_2022, home.households_2022),
+        electricity_lighting_share_2022: light.electricity_lighting_share_2022,
+        school_attendance_ages_5_to_24_2022: record.school_attendance_ages_5_to_24_2022
+      };
+    });
+    const keys = Object.keys(metrics[0] ?? {});
+    return Object.fromEntries(keys.map((key) => {
+      const values = metrics.map((metric) => metric[key]).filter(Number.isFinite);
+      if (!values.length) throw new Error(`Census data is missing the ${key} comparison scale.`);
+      const domain = key.includes("_share_")
+        ? 100
+        : key.includes("growth_rate")
+          ? Math.max(...values.map(Math.abs))
+          : Math.max(...values);
+      return [key, Math.max(1, domain)];
+    }));
+  })().then((scales) => {
+    state.comparisonScales = scales;
+    state.comparisonScalesError = false;
+    return scales;
+  }).catch((error) => {
+    state.comparisonScalesPromise = null;
+    throw error;
+  });
+  return state.comparisonScalesPromise;
+}
+
 function initializeComparison(root) {
   const selects = [...root.querySelectorAll(".compare-select")];
   if (state.comparisonSelections.length) {
@@ -5636,6 +5703,12 @@ function initializeComparison(root) {
   exportButton?.addEventListener("click", () => exportComparison(root));
   shareButton?.addEventListener("click", () => copyComparisonLink(root));
   update();
+  void loadComparisonScaleDomains().then(() => {
+    if (state.view === "comparisons") updateComparisonIndicators(selects, root);
+  }).catch(() => {
+    state.comparisonScalesError = true;
+    if (state.view === "comparisons") updateComparisonIndicators(selects, root);
+  });
 }
 
 async function copyComparisonLink(root = comparisonWorkspace) {
@@ -5703,9 +5776,15 @@ function updateComparisonIndicators(selects, root = comparisonWorkspace) {
     });
   });
   const note = root.querySelector("#compare-census-note");
-  if (note) note.textContent = errors.length
-    ? `Census comparison data could not be loaded: ${errors.join(" · ")}`
-    : "Counts are people or households as labelled. Percentages are household shares except population change, which is percent change over 2011–2022. Water and electricity measures keep their source definitions; incompatible values are not ranked.";
+  if (note) {
+    const differenceNote = " Differences are measured against the first selected municipality; share and growth differences are percentage points.";
+    const scaleNote = state.comparisonScales
+      ? " Bar scales are fixed to the full 213-municipality Census dataset."
+      : state.comparisonScalesError
+        ? " Fixed bars are unavailable; the exact values remain shown without a scaled bar."
+        : " Loading fixed scales from the full 213-municipality Census dataset…";
+    note.textContent = `${errors.length ? `Census comparison data could not be loaded: ${errors.join(" · ")}` : "Values use their labelled units and Census periods."}${differenceNote}${scaleNote}`;
+  }
   renderComparisonSeries(selects, root);
 }
 
@@ -5737,47 +5816,68 @@ function renderComparisonSeries(selects, root = comparisonWorkspace) {
     const mode = key?.includes("growth_rate") ? "signed"
       : key?.includes("_share_") ? "share"
         : "relative";
-    selected.forEach(({ id, municipality }) => {
+    const entries = selected.map(({ id, municipality }) => {
       const columnIndex = selects.findIndex((select) => select.value === id);
       const value = row.querySelector(`[data-index="${columnIndex}"][data-census-indicator]`)?.textContent ?? "—";
       const numeric = Number.parseFloat(value.replaceAll(",", ""));
+      return { id, municipality, value, numeric };
+    });
+    const firstNumeric = entries[0]?.numeric;
+    const domain = state.comparisonScales?.[key];
+    entries.forEach(({ id, municipality, value, numeric }, entryIndex) => {
       const line = document.createElement("div");
       line.className = "labour-series-line compare-series-line";
-      line.setAttribute("aria-label", `${municipality.name}: ${label}, ${value}`);
       const place = document.createElement("span");
       place.className = "compare-series-place";
       place.textContent = municipality.name;
       place.title = municipality.name;
       const track = document.createElement("div");
       track.className = `census-bar-track compare-series-track${mode === "signed" ? " signed" : ""}`;
+      track.hidden = !Number.isFinite(domain) || !Number.isFinite(numeric);
       const fill = document.createElement("span");
       fill.className = `compare-series-fill${numeric < 0 ? " negative" : ""}`;
-      if (Number.isFinite(numeric)) {
+      if (Number.isFinite(numeric) && Number.isFinite(domain) && domain > 0) {
         if (mode === "share") {
-          fill.style.width = `${Math.max(0, Math.min(100, numeric))}%`;
+          fill.style.width = `${Math.max(0, Math.min(100, numeric / domain * 100))}%`;
         } else if (mode === "signed") {
-          const valuesForMeasure = selected.map(({ id: selectedId }) => {
-            const selectedIndex = selects.findIndex((select) => select.value === selectedId);
-            const selectedValue = row.querySelector(`[data-index="${selectedIndex}"][data-census-indicator]`)?.textContent ?? "";
-            return Number.parseFloat(selectedValue.replaceAll(",", ""));
-          }).filter(Number.isFinite);
-          const maxAbs = Math.max(1, ...valuesForMeasure.map(Math.abs));
-          const width = Math.min(50, Math.abs(numeric) / maxAbs * 50);
+          const width = Math.min(50, Math.abs(numeric) / domain * 50);
           fill.style.width = `${width}%`;
           fill.style.left = numeric < 0 ? `${50 - width}%` : "50%";
         } else {
-          const valuesForMeasure = selected.map(({ id: selectedId }) => {
-            const selectedIndex = selects.findIndex((select) => select.value === selectedId);
-            const selectedValue = row.querySelector(`[data-index="${selectedIndex}"][data-census-indicator]`)?.textContent ?? "";
-            return Number.parseFloat(selectedValue.replaceAll(",", ""));
-          }).filter((selectedValue) => Number.isFinite(selectedValue) && selectedValue > 0);
-          const maximum = Math.max(1, ...valuesForMeasure);
-          fill.style.width = `${Math.max(0, Math.min(100, numeric / maximum * 100))}%`;
+          fill.style.width = `${Math.max(0, Math.min(100, numeric / domain * 100))}%`;
         }
       }
       track.append(fill);
-      const amount = document.createElement("strong");
-      amount.textContent = value;
+      const amount = document.createElement("span");
+      amount.className = "compare-series-amount";
+      const exactValue = document.createElement("strong");
+      exactValue.textContent = value;
+      amount.append(exactValue);
+      let difference = "";
+      if (entryIndex === 0 && entries.length > 1) {
+        difference = "Reference";
+      } else if (entryIndex > 0 && Number.isFinite(numeric) && Number.isFinite(firstNumeric)) {
+        const delta = numeric - firstNumeric;
+        const precision = mode === "share" || mode === "signed" || key === "avg_household_size_2022" ? 1 : 0;
+        const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
+        const units = mode === "share" || mode === "signed"
+          ? "pp"
+          : key?.startsWith("households_")
+            ? "households"
+            : key === "avg_household_size_2022"
+              ? "people / household"
+              : "people";
+        difference = `${sign}${formatCensusNumber(Math.abs(delta), precision)} ${units}`;
+      } else if (entryIndex > 0 && entries.length > 1) {
+        difference = "Difference unavailable";
+      }
+      if (difference) {
+        const differenceLabel = document.createElement("small");
+        differenceLabel.className = "compare-series-difference";
+        differenceLabel.textContent = difference;
+        amount.append(differenceLabel);
+      }
+      line.setAttribute("aria-label", `${municipality.name}: ${label}, ${value}${difference ? `, difference from ${entries[0].municipality.name}: ${difference}` : ""}`);
       line.append(place, track, amount);
       values.append(line);
     });
