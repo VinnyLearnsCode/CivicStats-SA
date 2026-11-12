@@ -144,10 +144,6 @@
                   <span class="map-hover-place" id="map-hover-compare-name"></span>
                   <button type="button" class="map-tooltip-compare" id="map-hover-compare-button">Add to Comparisons →</button>
                 </div>
-                <section class="map-pinned-detail" id="map-pinned-detail" aria-label="Pinned map indicator detail" hidden>
-                  <div class="map-pinned-detail-heading"><span class="panel-kicker">MAP VALUE</span><button class="square-button" id="close-map-pinned-detail" type="button" aria-label="Close map detail">×</button></div>
-                  <div id="map-pinned-detail-content" aria-live="polite"></div>
-                </section>
                 <span class="visually-hidden" id="map-keyboard-instructions">Map areas are keyboard accessible. Press Tab to focus an area, use arrow keys to move through areas alphabetically, Home or End to jump to the first or last area, and Enter or Space to select or compare the focused area.</span>
                 <div class="map-overlay map-top-left">
                   <span class="map-coordinate" id="map-location">SOUTH AFRICA · 9 PROVINCES</span>
@@ -156,8 +152,8 @@
                     <span data-zoom-level="national">South Africa</span><i aria-hidden="true">›</i><span data-zoom-level="ADM1">Province</span><i aria-hidden="true">›</i><span data-zoom-level="ADM2">District / metro</span><i aria-hidden="true">›</i><span data-zoom-level="ADM3">Municipality</span>
                   </div>
                 </div>
-                <div class="map-overlay layer-control">
-                  <span class="control-title">MAP LAYER</span>
+                <div class="map-overlay layer-control" id="layer-control">
+                  <div class="layer-control-heading"><span class="control-title">MAP LAYER</span><button class="layer-control-toggle" id="mobile-layer-toggle" type="button" aria-expanded="false" aria-controls="map-layer-list">Change</button></div>
                   <label class="map-period-label" id="census-period-control" for="map-census-year">CENSUS PERIOD
                     <select id="map-census-year" aria-label="Census reporting period for thematic map layers">
                       <option value="2022" selected>2022</option>
@@ -184,6 +180,7 @@
                       <option value="2014">2014</option>
                     </select>
                   </label>
+                  <div class="layer-option-list" id="map-layer-list">
                   <label class="layer-option"><input type="radio" name="map-layer" value="boundaries"><span class="layer-swatch boundary-swatch"></span><span class="layer-name">Administrative boundaries</span><span class="layer-coverage">National · province · district · municipality</span><span class="layer-state"></span></label>
                   <label class="layer-option selected" title="Loading verified municipal Census data"><input id="population-layer-radio" type="radio" name="map-layer" value="population" checked disabled><span class="layer-swatch population-swatch"></span><span class="layer-name">Population density</span><span class="layer-coverage">Municipal · aggregates upward</span><span class="layer-state">LOADING</span></label>
                   <label class="layer-option unavailable" title="Loading Census population change for 2011–2022"><input type="radio" name="map-layer" value="growth" disabled><span class="layer-swatch growth-swatch"></span><span class="layer-name">Population growth · 2011–2022</span><span class="layer-coverage">Municipal · aggregates upward</span><span class="layer-state">LOADING</span></label>
@@ -198,6 +195,7 @@
                   <label class="layer-option unavailable" title="Loading Stats SA province-level GDP-R data"><input type="radio" name="map-layer" value="economy" disabled><span class="layer-swatch population-swatch"></span><span class="layer-name">Economic activity · GDP-R</span><span class="layer-coverage">Province only</span><span class="layer-state">LOADING</span></label>
                   <button class="layer-coverage-action" type="button" data-layer-action="province" data-layer="economy">Switch map to provinces →</button>
                   <p class="map-layer-help" id="map-layer-help" role="status" hidden></p>
+                  </div>
                 </div>
                 <details class="map-overlay map-legend" id="map-legend">
                   <summary class="map-legend-summary">
@@ -213,6 +211,10 @@
                 <div class="map-loading" id="map-loading"><span class="spinner"></span>Loading verified boundary geometry…</div>
                 <div class="map-error" id="map-error" hidden></div>
               </div>
+              <section class="map-pinned-detail" id="map-pinned-detail" aria-label="Pinned map indicator detail" hidden>
+                <div class="map-pinned-detail-heading"><span class="panel-kicker">MAP VALUE</span><button class="square-button" id="close-map-pinned-detail" type="button" aria-label="Close map detail">×</button></div>
+                <div id="map-pinned-detail-content" aria-live="polite"></div>
+              </section>
               <div class="map-footer">
                 <span id="boundary-count">— boundary features</span>
                 <span>Source: geoBoundaries · OCHA ROSEA / Municipal Demarcation Board</span>

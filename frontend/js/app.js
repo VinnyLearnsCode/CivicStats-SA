@@ -4842,6 +4842,17 @@ function showMapLayerGuidance(layer) {
     ? "Municipal finance and audit records load in municipality profiles. Select a municipality, then open its profile; a complete compatible national finance measure is not available for map shading."
     : "A complete, period-compatible infrastructure indicator is not available for map shading. Use Projects for named project records, or Service delivery for Census household-access measures.";
   help.hidden = false;
+  setMobileLayerPickerOpen(true);
+}
+
+function setMobileLayerPickerOpen(open) {
+  const control = document.querySelector("#layer-control");
+  const toggle = document.querySelector("#mobile-layer-toggle");
+  if (!control || !toggle) return;
+  control.classList.toggle("mobile-layer-open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.textContent = open ? "Done" : "Change";
+  if (!open) document.querySelector("#map-layer-help").hidden = true;
 }
 
 async function activateProvinceMapLayer(layer) {
@@ -4864,11 +4875,12 @@ async function activateProvinceMapLayer(layer) {
   else void loadProvincialGdpData(state.economyMapYear);
   refreshMapStyles();
   if (help) {
-    help.textContent = layer === "unemployment"
-      ? "Province boundaries selected. Stats SA unemployment estimates are available at province level only."
-      : `Province boundaries selected. GDP-R is available at province level only for ${state.economyMapYear}.`;
-    help.hidden = false;
+    help.hidden = true;
   }
+  if (window.matchMedia("(max-width: 640px)").matches) setMobileLayerPickerOpen(false);
+  showToast(layer === "unemployment"
+    ? "Province boundaries selected. Showing the province-only unemployment layer."
+    : `Province boundaries selected. Showing province GDP-R for ${state.economyMapYear}.`);
 }
 
 async function loadCensusMapData(year) {
@@ -5407,6 +5419,7 @@ function renderNationalGdpHistory() {
     {
       title: "Nominal GDP",
       subtitle: "Current prices · R billion · not adjusted for inflation",
+      explanation: "A rise can reflect higher prices as well as more production, so this is not inflation-adjusted growth.",
       key: "gdpCurrentPricesRandBillions",
       color: "#58c8c1",
       format: (value) => `R${formatCensusNumber(value, 1)} bn`
@@ -5414,6 +5427,7 @@ function renderNationalGdpHistory() {
     {
       title: "Real GDP growth",
       subtitle: "Annual change · inflation-adjusted · percent",
+      explanation: "Shows year-over-year output change after adjusting for prices; a value below 0% means output contracted.",
       key: "realGdpGrowthPercent",
       color: "#a8bf77",
       format: (value) => `${formatCensusNumber(value, 1)}%`
@@ -5436,6 +5450,12 @@ function renderNationalGdpHistory() {
     heading.append(title, range);
     const subtitle = document.createElement("p");
     subtitle.textContent = chartSpec.subtitle;
+    const explanation = document.createElement("p");
+    explanation.className = "national-trend-context";
+    explanation.textContent = chartSpec.explanation;
+    const source = document.createElement("p");
+    source.className = "national-trend-source";
+    source.textContent = "Source: Statistics South Africa · GDP-R P0441.2";
 
     const minimum = Math.min(...chartRecords.map((record) => record.value));
     const maximum = Math.max(...chartRecords.map((record) => record.value));
@@ -5481,7 +5501,7 @@ function renderNationalGdpHistory() {
     const last = document.createElement("strong");
     last.textContent = `${points.at(-1).year} · ${chartSpec.format(points.at(-1).value)}`;
     footer.append(first, last);
-    article.append(heading, subtitle, svg, footer);
+    article.append(heading, subtitle, explanation, source, svg, footer);
     container.append(article);
   });
 }
@@ -6458,9 +6478,15 @@ function bindEvents() {
     input.addEventListener("change", () => {
       if (!input.checked || input.disabled) return;
       closeMapPinnedDetail();
+      document.querySelector("#map-layer-help").hidden = true;
       state.mapLayer = input.value;
       refreshMapStyles();
+      if (window.matchMedia("(max-width: 640px)").matches) setMobileLayerPickerOpen(false);
     });
+  });
+  document.querySelector("#mobile-layer-toggle").addEventListener("click", () => {
+    const control = document.querySelector("#layer-control");
+    setMobileLayerPickerOpen(!control.classList.contains("mobile-layer-open"));
   });
   document.querySelectorAll(".layer-coverage-action").forEach((button) => {
     button.addEventListener("click", () => {
