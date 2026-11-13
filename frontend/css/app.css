@@ -1033,9 +1033,9 @@ body { font-size: 15px; }
 .source-card a,
 .finance-source-note a,
 .source-check-note a,
-.map-tooltip-row:last-child .map-tooltip-detail { color: #72e0d7 !important; }
+.map-tooltip-row:last-child .map-tooltip-detail { color: #f0bd72 !important; }
 .summary-card .summary-source,
 .national-trend-source,
-.compare-series-period-source { color: #72e0d7 !important; }
+.compare-series-period-source { color: #f0bd72 !important; }
 .source-label,
 .map-tooltip-key { color: #b0bbb5 !important; }
