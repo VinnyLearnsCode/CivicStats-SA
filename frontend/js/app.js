@@ -4114,6 +4114,11 @@ function mapIndicatorValue(feature) {
     const province = canonicalProvinceName(feature.properties.shapeName);
     return state.climateMapRecords.get(province)?.annual?.temperatureC ?? null;
   }
+  if (state.mapLayer === "precipitation") {
+    if (feature.properties.shapeType !== "ADM1") return null;
+    const province = canonicalProvinceName(feature.properties.shapeName);
+    return state.climateMapRecords.get(province)?.annual?.precipitationMmPerDay ?? null;
+  }
   const record = censusMapRecordForFeature(feature);
   if (!record) return null;
   return state.mapLayer === "population"
@@ -4130,7 +4135,7 @@ function mapIndicatorValue(feature) {
 function activeMapRecords() {
   if (state.mapLayer === "unemployment") return [...state.labourMapRecords.values()];
   if (state.mapLayer === "economy") return state.provincialEconomyData?.records ?? [];
-  if (state.mapLayer === "temperature") return [...state.climateMapRecords.values()];
+  if (["temperature", "precipitation"].includes(state.mapLayer)) return [...state.climateMapRecords.values()];
   if (state.mapLayer === "boundaries") return [...state.censusMapRecords.values()];
   return (state.boundaryLayer?.getLayers() ?? [])
     .map((layer) => censusMapRecordForFeature(layer.feature))
@@ -4161,6 +4166,7 @@ function mapIndicatorBreaks() {
     unemployment: [15, 20, 25, 30],
     economy: [5, 10, 15, 20],
     temperature: [10, 15, 20, 25],
+    precipitation: [1, 2, 3, 4],
     electricity: [20, 40, 60, 80],
     water: [20, 40, 60, 80]
   };
@@ -4270,6 +4276,21 @@ function mapTooltipData(feature) {
       period: result?.source?.period ?? "NASA POWER climatology period not reported",
       source: "NASA Langley Research Center · POWER",
       note: Number.isFinite(value) ? "Long-run gridded climatology at one representative point in the province; not a forecast or province-wide spatial average." : "No verified NASA POWER temperature normal is available for this province."
+    };
+  }
+  if (state.mapLayer === "precipitation") {
+    if (geographyLevel !== "ADM1") {
+      return { place: name, indicator: "Mean daily precipitation", value: `Not available at ${geographyLabel} level`, period: "NASA POWER climatology", source: "NASA Langley Research Center · POWER", note: "This province-level climate layer is a climatological mean daily rate, not annual rainfall totals." };
+    }
+    const result = state.climateMapRecords.get(name);
+    const value = result?.annual?.precipitationMmPerDay;
+    return {
+      place: name,
+      indicator: "Mean daily precipitation",
+      value: Number.isFinite(value) ? `${formatCensusNumber(value, 1)} mm/day` : "No data for this province",
+      period: result?.source?.period ?? "NASA POWER climatology period not reported",
+      source: "NASA Langley Research Center · POWER",
+      note: Number.isFinite(value) ? "Long-run climatological mean daily precipitation at one representative point in the province; not an annual total or forecast." : "No verified NASA POWER precipitation normal is available for this province."
     };
   }
   const record = censusMapRecordForFeature(feature);
@@ -4428,6 +4449,7 @@ function mapTablePresentation() {
     boundaries: ["Administrative boundary", "—", "Boundary vintage 2020"],
     population: ["Population density", "people/km²", `Census ${year}`],
     temperature: ["Annual mean temperature", "°C", "NASA POWER climatology"],
+    precipitation: ["Mean daily precipitation", "mm/day", "NASA POWER climatology"],
     growth: ["Reported population change", "%", "Census 2011–2022"],
     unemployment: ["Official unemployment rate", "%", year],
     economy: ["Share of national GDP", "%", `GDP-R ${year}`],
@@ -4560,6 +4582,8 @@ function renderMapLegend() {
     heading.textContent = `GDP CONTRIBUTION · ${state.economyMapYear}`;
   } else if (state.mapLayer === "temperature") {
     heading.textContent = "ANNUAL MEAN TEMPERATURE · NASA POWER";
+  } else if (state.mapLayer === "precipitation") {
+    heading.textContent = "MEAN DAILY PRECIPITATION · NASA POWER";
   } else if (state.mapLayer === "growth") {
     heading.textContent = "POPULATION GROWTH · CENSUS 2011–2022";
   } else {
@@ -4593,6 +4617,12 @@ function renderMapLegend() {
         : state.climateMapLoading
           ? "Loading NASA POWER province temperature normals…"
           : "NASA POWER province temperature normals are unavailable.";
+    } else if (state.mapLayer === "precipitation") {
+      note.textContent = state.climateMapError
+        ? `NASA POWER precipitation data unavailable: ${state.climateMapError}`
+        : state.climateMapLoading
+          ? "Loading NASA POWER province precipitation normals…"
+          : "NASA POWER province precipitation normals are unavailable.";
     } else {
       note.textContent = state.censusMapError
         ? `Census layer unavailable: ${state.censusMapError}`
@@ -4604,12 +4634,12 @@ function renderMapLegend() {
     appendMissingMapLegendEntry(items, "No verified data · hatched gray");
     const failed = state.mapLayer === "unemployment" ? Boolean(state.labourMapError)
       : state.mapLayer === "economy" ? Boolean(state.economyMapError)
-        : state.mapLayer === "temperature" ? Boolean(state.climateMapError)
+        : ["temperature", "precipitation"].includes(state.mapLayer) ? Boolean(state.climateMapError)
         : Boolean(state.censusMapError);
     if (failed) addRetryButton(items, () => {
       if (state.mapLayer === "unemployment") void loadProvincialLabourData();
       else if (state.mapLayer === "economy") void loadProvincialGdpData(state.economyMapYear);
-      else if (state.mapLayer === "temperature") void loadProvincialTemperatureData();
+      else if (["temperature", "precipitation"].includes(state.mapLayer)) void loadProvincialTemperatureData();
       else void loadCensusMapData(state.censusMapYear);
     }, "Retry data");
     return;
@@ -4623,6 +4653,8 @@ function renderMapLegend() {
           ? record.gdpContributionPercent
           : state.mapLayer === "temperature"
             ? record.annual?.temperatureC
+            : state.mapLayer === "precipitation"
+              ? record.annual?.precipitationMmPerDay
           : state.mapLayer === "electricity"
             ? record.electricityLightingSharePercent
             : record.waterSchemeSharePercent)
@@ -4662,7 +4694,7 @@ function renderMapLegend() {
     const range = document.createElement("span");
     const upper = breaks[index] ?? values.at(-1);
     const precision = 1;
-    const suffix = state.mapLayer === "population" ? " people/km²" : state.mapLayer === "temperature" ? " °C" : "%";
+    const suffix = state.mapLayer === "population" ? " people/km²" : state.mapLayer === "temperature" ? " °C" : state.mapLayer === "precipitation" ? " mm/day" : "%";
     const label = `Band ${index + 1}`;
     if (index === 0) {
       range.textContent = `${label}: ≤ ${formatCensusNumber(upper, precision)}${suffix}`;
@@ -4680,9 +4712,11 @@ function renderMapLegend() {
       updated: `Source release ${state.labourData?.source.releaseDate ?? "date unavailable"}`,
       url: state.labourData?.source.sourceUrl
     }
-    : state.mapLayer === "temperature"
+    : ["temperature", "precipitation"].includes(state.mapLayer)
       ? {
-        detail: "Source: NASA Langley Research Center · POWER climatology; annual mean near-surface air temperature at one representative point per province; unit: °C.",
+        detail: state.mapLayer === "temperature"
+          ? "Source: NASA Langley Research Center · POWER climatology; annual mean near-surface air temperature at one representative point per province; unit: °C."
+          : "Source: NASA Langley Research Center · POWER climatology; mean daily precipitation at one representative point per province; unit: mm/day.",
         updated: `Normal period ${state.climateMapRecords.values().next().value?.source?.period ?? "reported by source"}`,
         url: "https://power.larc.nasa.gov/"
       }
@@ -4719,6 +4753,8 @@ function renderMapLegend() {
     ? "Shows the share of each province’s labour force without work. These are provincial survey estimates, not municipal rates."
     : state.mapLayer === "temperature"
       ? "Shows annual mean temperature from NASA POWER long-run climatology at one representative point per province. It is not live weather or a province-wide spatial average."
+      : state.mapLayer === "precipitation"
+        ? "Shows the climatological mean daily precipitation rate from NASA POWER at one representative point per province. This is not a yearly rainfall total or a forecast."
       : state.mapLayer === "economy"
       ? "Shows each province’s share of South Africa’s economy for the selected year. It does not show municipal economic output."
       : state.mapLayer === "growth"
@@ -4737,6 +4773,8 @@ function renderMapLegend() {
     ? "Same ranges at every boundary level. Higher means more people in the labour force are unemployed; that indicates a worse employment outcome."
     : state.mapLayer === "temperature"
       ? "Higher means a warmer climatological annual mean at the sampled representative point. Do not interpret as a forecast or local reading."
+      : state.mapLayer === "precipitation"
+        ? "Higher means a greater long-run average daily precipitation rate at the sampled representative point; it is not the total rainfall for a year."
       : state.mapLayer === "economy"
       ? "Same ranges at every boundary level. Higher means a larger share of national GDP-R, not higher income per person."
       : state.mapLayer === "growth"
@@ -4746,21 +4784,21 @@ function renderMapLegend() {
           : state.mapLayer === "electricity"
             ? "Same ranges at every boundary level. Higher means more households report electricity as their main lighting source; it does not measure outages."
             : "Same ranges at every boundary level. Higher means more households report a water scheme as their source; it does not measure water quality or reliability.";
-  const missingLabel = state.mapLayer === "unemployment" || state.mapLayer === "economy" || state.mapLayer === "temperature"
+  const missingLabel = state.mapLayer === "unemployment" || state.mapLayer === "economy" || ["temperature", "precipitation"].includes(state.mapLayer)
     ? "No value at this level · province data only · hatched gray"
     : "No verified value in source or matched records · hatched gray";
   const coverageNote = document.createElement("span");
   coverageNote.className = "legend-note";
   coverageNote.textContent = state.mapLayer === "unemployment"
     ? "Coverage: Stats SA publishes this measure for provinces only. Use the province map for verified values; district and municipality areas are intentionally unscored."
-    : state.mapLayer === "temperature"
+    : state.mapLayer === "temperature" || state.mapLayer === "precipitation"
       ? "Coverage: province representative points only. District and municipality areas are intentionally unscored in this first stage."
       : state.mapLayer === "economy"
       ? "Coverage: GDP-R is published at province level only. Use the province map for verified values; district and municipality areas are intentionally unscored."
       : "Coverage: verified source records are municipal. District and province values are derived from matched municipal records; hatched areas have no usable verified value.";
   const note = document.createElement("span");
   note.className = "legend-note";
-  const aggregateNote = state.boundaryLevel === "ADM3" || ["boundaries", "unemployment", "economy", "temperature"].includes(state.mapLayer)
+  const aggregateNote = state.boundaryLevel === "ADM3" || ["boundaries", "unemployment", "economy", "temperature", "precipitation"].includes(state.mapLayer)
     ? ""
     : state.mapLayer === "population"
       ? " Larger-area values sum matched municipal populations and source areas."
@@ -4902,8 +4940,9 @@ async function loadProvincialTemperatureData() {
   state.climateMapPromise = Promise.all(provinces.map(async (feature) => {
     const result = await getJson(`/api/geographies/ADM1/${encodeURIComponent(feature.properties.shapeID)}/climate`);
     const name = canonicalProvinceName(result.geography?.name);
-    if (!name || !Number.isFinite(result.annual?.temperatureC) || !result.source?.url) {
-      throw new Error("NASA POWER returned incomplete provincial temperature data.");
+    if (!name || !Number.isFinite(result.annual?.temperatureC) ||
+      !Number.isFinite(result.annual?.precipitationMmPerDay) || !result.source?.url) {
+      throw new Error("NASA POWER returned incomplete provincial climate data.");
     }
     return [name, result];
   })).then((records) => {
@@ -4992,6 +5031,7 @@ function updateMapLayerSummary() {
     unemployment: `Official Stats SA QLFS unemployment estimate · ${state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter}. Province-level only; not a district or municipal rate.`,
     economy: `Official Stats SA GDP-R · ${state.economyMapYear}. Shows each province’s share of national GDP; no district or municipal GDP-R values are published here.`,
     temperature: "Annual mean temperature · NASA POWER climatology at one representative point in each province. Province-level only; not a local forecast.",
+    precipitation: "Mean daily precipitation · NASA POWER climatology at one representative point in each province. The rate is in mm/day, not annual totals.",
     electricity: `Households reporting electricity as their main lighting source · Census ${state.censusMapYear}. Municipal source percentages; larger-area values are approximate weighted aggregates.`,
     water: `Households reporting a water-scheme source · Census ${state.censusMapYear}. Municipal source counts; larger-area shares are derived aggregates.`
   };
@@ -5021,7 +5061,7 @@ function updateMapLayerControls() {
   if (economySelect) economySelect.value = String(state.economyMapYear);
   document.querySelectorAll('input[name="map-layer"]').forEach((input) => {
     const thematic = input.value !== "boundaries";
-    const provinceOnly = ["unemployment", "economy", "temperature"].includes(input.value);
+    const provinceOnly = ["unemployment", "economy", "temperature", "precipitation"].includes(input.value);
     const censusLayer = ["population", "growth", "water", "electricity"].includes(input.value);
     const supported = provinceOnly || censusLayer;
     const profileDataOnly = ["finance", "infrastructure"].includes(input.value);
@@ -5029,7 +5069,7 @@ function updateMapLayerControls() {
       ? unemploymentAvailable
       : input.value === "economy"
         ? provincialGdpAvailable
-        : input.value === "temperature"
+        : ["temperature", "precipitation"].includes(input.value)
           ? temperatureAvailable
         : input.value === "growth"
           ? growthAvailable
@@ -5044,14 +5084,14 @@ function updateMapLayerControls() {
       ? state.labourMapLoading
       : input.value === "economy"
         ? state.economyMapLoading
-          : input.value === "temperature"
+          : ["temperature", "precipitation"].includes(input.value)
             ? state.climateMapLoading
         : state.censusMapLoading;
     const error = input.value === "unemployment"
       ? state.labourMapError
       : input.value === "economy"
         ? state.economyMapError
-          : input.value === "temperature"
+          : ["temperature", "precipitation"].includes(input.value)
             ? state.climateMapError
         : state.censusMapError;
     input.checked = input.value === state.mapLayer;
@@ -5068,7 +5108,7 @@ function updateMapLayerControls() {
             ? `Verified source data unavailable: ${error}`
             : loading
               ? "Loading verified source data"
-              : input.value === "temperature"
+              : ["temperature", "precipitation"].includes(input.value)
                 ? "Load NASA POWER normals by selecting this layer and switching the map to Provinces"
               : "Verified source data is unavailable"
           : !levelCompatible
@@ -5082,7 +5122,9 @@ function updateMapLayerControls() {
                 ? `Statistics South Africa QLFS ${state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter} provincial data`
                 : input.value === "economy"
                   ? `Statistics South Africa GDP-R ${state.economyMapYear} provincial GDP contribution`
-                  : "NASA POWER annual mean temperature · provincial representative points"
+                  : input.value === "temperature"
+                    ? "NASA POWER annual mean temperature · provincial representative points"
+                    : "NASA POWER mean daily precipitation · provincial representative points"
               : input.value === "electricity"
                 ? `Stats SA Census ${state.censusMapYear} household share reporting electricity as the main lighting source; larger areas are household-weighted municipal aggregates, not connection status or reliability`
                 : input.value === "growth"
@@ -5094,11 +5136,11 @@ function updateMapLayerControls() {
     if (thematic && profileDataOnly) status.textContent = "NO MAP DATA";
     else if (thematic && !supported) status.textContent = "NO DATA";
     else if (thematic && !available && loading) status.textContent = "LOADING";
-    else if (thematic && !available) status.textContent = input.value === "temperature" && !state.climateMapError ? "LOAD IN PROVINCES" : "NO DATA";
+    else if (thematic && !available) status.textContent = ["temperature", "precipitation"].includes(input.value) && !state.climateMapError ? "LOAD IN PROVINCES" : "NO DATA";
     else if (thematic && !levelCompatible) status.textContent = "PROVINCE ONLY";
     else if (thematic && input.value === "unemployment") status.textContent = state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter;
     else if (thematic && input.value === "economy") status.textContent = String(state.economyMapYear);
-    else if (thematic && input.value === "temperature") status.textContent = "NASA POWER";
+    else if (thematic && ["temperature", "precipitation"].includes(input.value)) status.textContent = "NASA POWER";
     else if (thematic && censusLayer) status.textContent = state.boundaryLevel === "ADM3" ? String(state.censusMapYear) : `${state.censusMapYear} · DERIVED`;
     else status.textContent = input.value === state.mapLayer ? "ACTIVE" : "";
   });
@@ -5188,7 +5230,9 @@ async function activateProvinceMapLayer(layer) {
     ? "Province boundaries selected. Showing the province-only unemployment layer."
     : layer === "economy"
       ? `Province boundaries selected. Showing province GDP-R for ${state.economyMapYear}.`
-      : "Province boundaries selected. Loading NASA POWER annual temperature normals.");
+      : layer === "temperature"
+        ? "Province boundaries selected. Loading NASA POWER annual temperature normals."
+        : "Province boundaries selected. Loading NASA POWER precipitation normals.");
 }
 
 async function loadCensusMapData(year) {
@@ -5400,7 +5444,7 @@ async function ensureBoundaryCollection(level) {
 async function changeBoundaryLevel(level, { preserveView = false } = {}) {
   const collection = await ensureBoundaryCollection(level);
   state.boundaryLevel = level;
-  const provinceLayer = ["unemployment", "economy", "temperature"].includes(state.mapLayer);
+  const provinceLayer = ["unemployment", "economy", "temperature", "precipitation"].includes(state.mapLayer);
   if (level !== "ADM1" && provinceLayer) state.mapLayer = "boundaries";
   if (level === "ADM1") {
     void loadProvincialGdpData(state.economyMapYear);
@@ -5410,7 +5454,7 @@ async function changeBoundaryLevel(level, { preserveView = false } = {}) {
 }
 
 function boundaryLevelForZoom() {
-  if (["unemployment", "economy", "temperature"].includes(state.mapLayer)) return "ADM1";
+  if (["unemployment", "economy", "temperature", "precipitation"].includes(state.mapLayer)) return "ADM1";
   const zoom = state.map?.getZoom() ?? 5;
   if (zoom < 5.8) return "ADM1";
   if (zoom < 7.4) return "ADM2";
@@ -7042,19 +7086,24 @@ function bindEvents() {
 async function initialize() {
   const sharedParams = new URLSearchParams(location.search);
   const sharedLayer = sharedParams.get("layer");
-  if (["boundaries", "population", "growth", "unemployment", "economy", "water", "electricity"].includes(sharedLayer)) {
+  if (["boundaries", "population", "growth", "unemployment", "economy", "water", "electricity", "temperature", "precipitation"].includes(sharedLayer)) {
     state.mapLayer = sharedLayer;
   }
   const sharedCensusYear = Number(sharedParams.get("censusYear"));
   if ([2011, 2022].includes(sharedCensusYear)) state.censusMapYear = sharedCensusYear;
   const sharedBoundaryLevel = sharedParams.get("boundaryLevel");
   if (["ADM1", "ADM2", "ADM3"].includes(sharedBoundaryLevel)) state.boundaryLevel = sharedBoundaryLevel;
+  if (["temperature", "precipitation"].includes(state.mapLayer)) {
+    state.boundaryLevel = "ADM1";
+    state.autoBoundaryDetail = false;
+  }
   const sharedAutoDetail = sharedParams.get("autoDetail");
   if (sharedAutoDetail === "0" || sharedAutoDetail === "1") {
     state.autoBoundaryDetail = sharedAutoDetail === "1";
   } else if (["ADM1", "ADM2", "ADM3"].includes(sharedBoundaryLevel)) {
     state.autoBoundaryDetail = false;
   }
+  if (["temperature", "precipitation"].includes(state.mapLayer)) state.autoBoundaryDetail = false;
   document.querySelector("#boundary-level").value = state.boundaryLevel;
   document.querySelector("#auto-boundary-detail").checked = state.autoBoundaryDetail;
   const sharedGdpYear = Number(sharedParams.get("gdpYear"));
@@ -7129,6 +7178,7 @@ async function initialize() {
     renderNationalHighlights();
     renderNationalMetrics();
     setMapLayer(startupCollection);
+    if (["temperature", "precipitation"].includes(state.mapLayer)) void loadProvincialTemperatureData();
     renderMapComparisonSelection();
     syncBoundaryLevelToZoom();
     document.querySelector("#map-loading").hidden = true;
