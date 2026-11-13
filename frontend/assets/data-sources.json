@@ -116,6 +116,17 @@
     "dataPeriod": "January 2001–December 2025 climatology"
   },
   {
+    "id": "openaq",
+    "name": "OpenAQ · PM2.5 monitoring stations",
+    "publisher": "OpenAQ and contributing data providers",
+    "url": "https://openaq.org/",
+    "license": "OpenAQ terms of use and source-specific licenses apply; retain attribution.",
+    "apiUrl": "https://api.openaq.org/v3/parameters/2/latest",
+    "status": "optional-api",
+    "detail": "Latest available station-level PM2.5 readings in South Africa from OpenAQ's first 1,000 latest-sensor records, displayed with the provider's timestamp. The paginated feed may omit stations; a missing marker is not evidence of clean air. API key is stored server-side as OPENAQ_API_KEY.",
+    "dataPeriod": "Latest available observation per station"
+  },
+  {
     "id": "world-bank-wdi",
     "name": "World Bank · World Development Indicators",
     "publisher": "World Bank",

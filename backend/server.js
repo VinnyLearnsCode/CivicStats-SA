@@ -1180,84 +1180,57 @@ async function loadNasaPowerClimatology(providerClient, feature) {
   };
 }
 
-async function loadOpenAqPm25Stations(providerClient, apiKey) {
-  const headers = { "X-API-Key": apiKey };
-  const locationsUrl = new URL(`${openAqApiRoot}/locations`);
-  locationsUrl.searchParams.set("iso", "ZA");
-  locationsUrl.searchParams.set("parameters_id", "2");
-  locationsUrl.searchParams.set("limit", "1000");
-  const locationResponse = await providerClient.getJson(locationsUrl, { headers, timeoutMs: 20000 });
-  const locations = Array.isArray(locationResponse?.results) ? locationResponse.results : [];
-  const locationCount = Number(locationResponse?.meta?.found);
-  if (!Number.isFinite(locationCount) || !Array.isArray(locationResponse.results)) {
-    throw new Error("OpenAQ returned an invalid station list.");
+async function loadOpenAqPm25Stations(providerClient, apiKey, provinceBoundaries) {
+  const latestUrl = new URL(`${openAqApiRoot}/parameters/2/latest`);
+  latestUrl.searchParams.set("limit", "1000");
+  const response = await providerClient.getJson(latestUrl, {
+    headers: { "X-API-Key": apiKey },
+    timeoutMs: 20000
+  });
+  if (!Array.isArray(response?.results) || !provinceBoundaries?.features?.length) {
+    throw new Error("OpenAQ returned an invalid latest-reading response.");
   }
-  const candidates = locations.filter((location) =>
-    Number.isInteger(location.id) &&
-    Number.isFinite(location.coordinates?.latitude) &&
-    Number.isFinite(location.coordinates?.longitude) &&
-    Array.isArray(location.sensors) &&
-    location.sensors.some((sensor) => sensor.parameter?.id === 2 || sensor.parameter?.name === "pm25")
-  );
-  const stations = [];
-  let failedLocations = 0;
-  let cursor = 0;
-  const concurrency = 8;
-  await Promise.all(Array.from({ length: Math.min(concurrency, candidates.length) }, async () => {
-    while (cursor < candidates.length) {
-      const location = candidates[cursor++];
-      const pm25Sensors = location.sensors.filter((sensor) =>
-        sensor.parameter?.id === 2 || sensor.parameter?.name === "pm25"
-      );
-      const sensorById = new Map(pm25Sensors.map((sensor) => [sensor.id, sensor]));
-      try {
-        const latestUrl = new URL(`${openAqApiRoot}/locations/${location.id}/latest`);
-        latestUrl.searchParams.set("limit", "100");
-        const latestResponse = await providerClient.getJson(latestUrl, { headers, timeoutMs: 12000 });
-        const observations = (Array.isArray(latestResponse?.results) ? latestResponse.results : [])
-          .filter((reading) => sensorById.has(reading.sensorsId) &&
-            Number.isFinite(reading.value) && reading.value >= 0 &&
-            Number.isFinite(Date.parse(reading.datetime?.utc)));
-        observations.sort((left, right) => Date.parse(right.datetime.utc) - Date.parse(left.datetime.utc));
-        const reading = observations[0];
-        if (!reading) continue;
-        const sensor = sensorById.get(reading.sensorsId);
-        let concentration = reading.value;
-        const sourceUnit = String(sensor.parameter?.units ?? "").trim().toLocaleLowerCase().replaceAll("μ", "µ");
-        if (sourceUnit === "mg/m³" || sourceUnit === "mg/m3") concentration *= 1000;
-        else if (!new Set(["µg/m³", "µg/m3", "ug/m³", "ug/m3"]).has(sourceUnit)) continue;
-        stations.push({
-          id: location.id,
-          name: location.name || location.locality || `Monitoring station ${location.id}`,
-          latitude: location.coordinates.latitude,
-          longitude: location.coordinates.longitude,
-          provider: location.provider?.name ?? location.owner?.name ?? "Data provider not specified",
-          pm25: {
-            value: Number(concentration.toFixed(2)),
-            unit: "µg/m³",
-            observedAtUtc: reading.datetime.utc,
-            observedAtLocal: reading.datetime.local ?? reading.datetime.utc,
-            sensorId: reading.sensorsId
-          }
-        });
-      } catch {
-        failedLocations += 1;
-      }
+  const readingsByLocation = new Map();
+  for (const reading of response.results) {
+    const latitude = reading.coordinates?.latitude;
+    const longitude = reading.coordinates?.longitude;
+    if (!Number.isInteger(reading.locationsId) || !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) || !Number.isFinite(reading.value) || reading.value < 0 ||
+      !Number.isFinite(Date.parse(reading.datetime?.utc)) ||
+      !provinceBoundaries.features.some((feature) =>
+        pointInGeometry([longitude, latitude], feature.geometry)
+      )) continue;
+    const previous = readingsByLocation.get(reading.locationsId);
+    if (!previous || Date.parse(reading.datetime.utc) > Date.parse(previous.datetime.utc)) {
+      readingsByLocation.set(reading.locationsId, reading);
     }
-  }));
-  stations.sort((left, right) => left.name.localeCompare(right.name));
+  }
+  const stations = [...readingsByLocation.entries()].map(([locationId, reading]) => ({
+    id: locationId,
+    name: `OpenAQ station ${locationId}`,
+    latitude: reading.coordinates.latitude,
+    longitude: reading.coordinates.longitude,
+    provider: "OpenAQ contributing data source",
+    pm25: {
+      value: Number(reading.value.toFixed(2)),
+      unit: "µg/m³",
+      observedAtUtc: reading.datetime.utc,
+      observedAtLocal: reading.datetime.local ?? reading.datetime.utc,
+      sensorId: reading.sensorsId
+    }
+  })).sort((left, right) => left.name.localeCompare(right.name));
+  const totalReadings = Number(response.meta?.found);
   return {
     stations,
-    stationLocationsFound: locationCount,
-    stationLocationsReturned: candidates.length,
-    failedLocations,
+    sourcePageLimit: 1000,
+    sourceReadingsFound: Number.isFinite(totalReadings) ? totalReadings : null,
     checkedAt: new Date().toISOString(),
     source: {
       publisher: "OpenAQ · aggregated air-quality observations",
       parameter: "PM2.5",
       unit: "µg/m³",
       url: "https://openaq.org/",
-      apiUrl: "https://api.openaq.org/v3/locations"
+      apiUrl: latestUrl.toString()
     }
   };
 }
@@ -2289,7 +2262,11 @@ export async function createAppServer({
         return;
       }
       if (!openAqStationsPromise) {
-        openAqStationsPromise = loadOpenAqPm25Stations(providerClient, configuredOpenAqApiKey)
+        openAqStationsPromise = loadOpenAqPm25Stations(
+          providerClient,
+          configuredOpenAqApiKey,
+          boundaries.get("ADM1")
+        )
           .then((value) => {
             openAqStationsCache = { value, fetchedAt: Date.now() };
             return value;

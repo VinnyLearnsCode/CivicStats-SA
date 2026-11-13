@@ -4662,7 +4662,7 @@ function renderMapLegend() {
       coverage.className = "map-coverage-status";
       coverage.textContent = `${fresh} recent readings · ${state.airQualityStations.length} stations with data`;
       items.append(coverage);
-      const thresholds = ["≤ 5 µg/m³", "> 5–15 µg/m³", "> 15–25 µg/m³", "> 25–35 µg/m³", "> 35 µg/m³"];
+      const thresholds = ["≤ 5 µg/m³", "> 5 to ≤ 15 µg/m³", "> 15 to ≤ 25 µg/m³", "> 25 to ≤ 35 µg/m³", "> 35 µg/m³"];
       thresholds.forEach((range, index) => {
         const row = document.createElement("span");
         row.className = "map-legend-range";
@@ -4686,8 +4686,12 @@ function renderMapLegend() {
       const coverageNote = document.createElement("span");
       coverageNote.className = "legend-note";
       const metadata = state.airQualityMetadata;
-      coverageNote.textContent = `Latest values are returned for ${metadata?.stationLocationsReturned ?? state.airQualityStations.length} of ${metadata?.stationLocationsFound ?? state.airQualityStations.length} PM2.5 station locations; ${metadata?.failedLocations ?? 0} station requests failed. Coverage is uneven. No marker is not evidence of clean air.`;
+      coverageNote.textContent = `Showing ${state.airQualityStations.length} South African stations found in the first ${metadata?.sourcePageLimit ?? 1000} OpenAQ latest-reading records. The paginated feed may omit stations. A missing marker is not evidence of clean air.`;
       items.append(coverageNote);
+      const scaleNote = document.createElement("span");
+      scaleNote.className = "legend-note";
+      scaleNote.textContent = "Colors show concentration bands for comparison; they are not health categories or an official air-quality index.";
+      items.append(scaleNote);
     }
     const sourceLink = document.createElement("a");
     sourceLink.className = "legend-source-link";

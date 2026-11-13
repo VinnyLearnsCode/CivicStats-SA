@@ -128,6 +128,7 @@ The additional [`electricity-lighting-muni.csv`](frontend/assets/data/electricit
 - `GET /api/municipalities/:boundaryId/projects?year=2024` — source-reported Capital Acquisition (v2) category records, not named infrastructure projects.
 - `GET /api/municipalities/:boundaryId/politics` — historical 2021 IEC party seat counts, ward/PR split and current election source links.
 - `GET /api/geographies/:level/:boundaryId/climate` — NASA POWER monthly temperature and precipitation climatology at a representative point in an ADM1, ADM2 or ADM3 boundary.
+- `GET /api/environment/air-quality/pm25` — latest available OpenAQ PM2.5 reading per South African monitoring station; returns `503` with `SOURCE_NOT_CONFIGURED` until `OPENAQ_API_KEY` is set on the Render web service. Station readings retain their source timestamps and are not area averages.
 - `GET /api/economy/national` — World Bank national GDP, real GDP growth and sector-value-added time series.
 - `GET /api/publications/sacn?limit=8` — South African Cities Network publications.
 - `GET /api/data/availability` — persisted dataset status; reports `not_configured` when `DATABASE_URL` is absent.
@@ -144,7 +145,7 @@ Public data routes remain read-only. Mutating administrative endpoints require a
 
 ## PostgreSQL persistence and queued Treasury imports
 
-The Render Blueprint references the existing Neon PostgreSQL database via `DATABASE_URL` and configures a dedicated worker. Set that secret on both services without committing or sharing it. Queue entries, retry state, lease ownership and import results live in Postgres rather than process memory. The worker claims jobs with `FOR UPDATE SKIP LOCKED`; failed attempts are retried with bounded exponential backoff, and abandoned claims can be recovered after their lease expires. Repeated equivalent requests are deduplicated while a job is active.
+The Render Blueprint references the existing Neon PostgreSQL database via `DATABASE_URL` and configures a dedicated worker. Set that secret on both services without committing or sharing it. The web service also accepts an optional `OPENAQ_API_KEY` for the PM2.5 station map; keep the key only in Render's environment settings. Queue entries, retry state, lease ownership and import results live in Postgres rather than process memory. The worker claims jobs with `FOR UPDATE SKIP LOCKED`; failed attempts are retried with bounded exponential backoff, and abandoned claims can be recovered after their lease expires. Repeated equivalent requests are deduplicated while a job is active.
 
 On service startup, the web service and worker both apply versioned, additive migrations under a PostgreSQL advisory lock. No migration drops or replaces existing tables or records. The web application still starts if Neon is temporarily unavailable; database-backed requests report unavailable until the connection returns. To apply migrations manually, set the existing Neon `DATABASE_URL` in the process environment and run:
 

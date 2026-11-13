@@ -78,6 +78,83 @@ test("database health reports real query success and failure without diagnostics
   }
 });
 
+test("air-quality endpoint reports missing OpenAQ configuration safely", async () => {
+  const airQualityServer = await createAppServer({
+    dataStore: null,
+    adminToken: null,
+    openAqApiKey: ""
+  });
+  await new Promise((resolve) => airQualityServer.listen(0, "127.0.0.1", resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${airQualityServer.address().port}/api/environment/air-quality/pm25`);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: "Air-quality station data is not configured on this server.",
+      code: "SOURCE_NOT_CONFIGURED"
+    });
+  } finally {
+    await new Promise((resolve, reject) => airQualityServer.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("air-quality endpoint filters OpenAQ PM2.5 readings to South African stations and keeps its key private", async () => {
+  const apiKey = "test-openaq-key-that-must-stay-private";
+  let requestCount = 0;
+  let sentHeaders;
+  const airQualityServer = await createAppServer({
+    dataStore: null,
+    adminToken: null,
+    openAqApiKey: apiKey,
+    fetchImpl: async (input, options) => {
+      requestCount += 1;
+      assert.match(String(input), /\/v3\/parameters\/2\/latest\?limit=1000$/);
+      sentHeaders = options.headers;
+      return Response.json({
+        meta: { found: 3 },
+        results: [
+          {
+            locationsId: 77,
+            sensorsId: 7701,
+            value: 18.4,
+            coordinates: { latitude: -26.2041, longitude: 28.0473 },
+            datetime: { utc: "2026-11-12T10:00:00Z", local: "2026-11-12T12:00:00+02:00" }
+          },
+          {
+            locationsId: 77,
+            sensorsId: 7702,
+            value: 12.3,
+            coordinates: { latitude: -26.2041, longitude: 28.0473 },
+            datetime: { utc: "2026-11-12T11:00:00Z", local: "2026-11-12T13:00:00+02:00" }
+          },
+          {
+            locationsId: 88,
+            sensorsId: 8801,
+            value: 9,
+            coordinates: { latitude: 0, longitude: 0 },
+            datetime: { utc: "2026-11-12T11:00:00Z", local: "2026-11-12T11:00:00Z" }
+          }
+        ]
+      });
+    }
+  });
+  await new Promise((resolve) => airQualityServer.listen(0, "127.0.0.1", resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${airQualityServer.address().port}/api/environment/air-quality/pm25`);
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    const result = JSON.parse(body);
+    assert.equal(requestCount, 1);
+    assert.equal(sentHeaders["X-API-Key"], apiKey);
+    assert.equal(result.stations.length, 1);
+    assert.equal(result.stations[0].id, 77);
+    assert.equal(result.stations[0].pm25.value, 12.3);
+    assert.equal(result.stations[0].pm25.observedAtUtc, "2026-11-12T11:00:00Z");
+    assert.equal(body.includes(apiKey), false);
+  } finally {
+    await new Promise((resolve, reject) => airQualityServer.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 test("municipality search returns Johannesburg and a contained Gauteng hierarchy", async () => {
   const search = await get("/api/municipalities?q=Johannesburg");
   assert.equal(search.status, 200);
@@ -303,7 +380,7 @@ test("Census map layers return complete 2011 and 2022 municipal measures with ex
     assert.equal(result.total, 213);
     assert.equal(result.records.length, 213);
     assert.equal(result.records.every((record) => record.year === year), true);
-    assert.match(result.methodology, /Population density is calculated/);
+    assert.match(result.methodology, /population density uses source-reported population divided by Census source area/i);
     assert.match(result.sourceUrl, /Provinces_at_a_Glance\.pdf/);
     assert.equal(result.electricitySource.publisher, "Statistics South Africa");
     assert.match(result.electricitySource.url, /Census_2022_Municipal_factsheet-Web\.pdf/);
@@ -428,7 +505,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(stylesheetText, /\.map-data-table-panel/);
   assert.match(stylesheetText, /\.visually-hidden/);
   assert.match(stylesheetText, /\.retry-button/);
-  assert.match(stylesheetText, /\.compare-mobile-card/);
+  assert.match(stylesheetText, /\.compare-series-group/);
   assert.match(stylesheetText, /\.map-legend-band-rank/);
   assert.match(stylesheetText, /\.leaflet-interactive:focus-visible/);
   assert.match(stylesheetText, /\.metric-explainer/);
@@ -461,17 +538,17 @@ test("the stylesheet, browser application and bundled source catalogue are serve
     applicationScript.indexOf("function renderGeographyChildren(selected)")
   );
   assert.match(profileSelectionSource, /refreshSelectionLayer\(\)/);
-  assert.match(applicationScript, /Band 1 is lowest and Band 5 is highest/);
+  assert.match(applicationScript, /lowerLabel\.textContent = "LOWER"/);
+  assert.match(applicationScript, /higherLabel\.textContent = "HIGHER"/);
   assert.match(applicationScript, /Band \$\{index \+ 1\}/);
   assert.match(applicationScript, /function handleMapRegionKeydown/);
   assert.match(applicationScript, /ArrowRight: 1/);
-  assert.match(applicationScript, /Press Enter or Space to open this area/);
+  assert.match(applicationScript, /Click once or press Enter or Space to select this area/);
   assert.match(applicationScript, /Use the arrow keys to review results/);
   assert.match(applicationScript, /function addDetailError/);
   assert.match(applicationScript, /Retrying…/);
   assert.match(applicationScript, /Retry Census data/);
-  assert.match(applicationScript, /function renderMobileComparison/);
-  assert.match(applicationScript, /compare-mobile-data/);
+  assert.match(applicationScript, /function renderMapComparisonSelection/);
   assert.equal(index.status, 200);
   const indexHtml = await index.text();
   assert.match(indexHtml, /role="combobox" aria-autocomplete="list"/);
@@ -483,6 +560,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(indexHtml, /CIVICSCORE · BASIC SERVICES PILOT/);
   assert.match(indexHtml, /aria-describedby="map-keyboard-instructions"/);
   assert.match(indexHtml, /id="map-keyboard-hint"/);
+  assert.match(indexHtml, /id="map-compare-panel"/);
   assert.match(indexHtml, /aria-live="polite"/);
   assert.equal(sourceCatalogue.status, 200);
   const sources = await sourceCatalogue.json();
