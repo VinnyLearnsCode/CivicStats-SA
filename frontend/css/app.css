@@ -251,6 +251,7 @@ a { color: inherit; }
 .layer-group + .layer-group { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-soft); }
 .layer-more-options { margin-top: 6px; border-top: 1px solid var(--border-soft); }
 .layer-more-options > summary { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 2px; color: #c4cec8; cursor: pointer; font-size: 12px; list-style: none; }
+.layer-more-availability { flex: 0 1 auto; color: #c4a874; font-size: 10px; line-height: 1.3; text-align: right; }
 .layer-more-options > summary::-webkit-details-marker { display: none; }
 .layer-more-options > summary::after { content: "+"; color: #f0bd72; font: 16px var(--mono); }
 .layer-more-options[open] > summary::after { content: "−"; }

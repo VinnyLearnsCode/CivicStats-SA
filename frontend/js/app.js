@@ -4971,6 +4971,28 @@ function updateMapLayerControls() {
     else if (thematic && censusLayer) status.textContent = state.boundaryLevel === "ADM3" ? String(state.censusMapYear) : `${state.censusMapYear} · DERIVED`;
     else status.textContent = input.value === state.mapLayer ? "ACTIVE" : "";
   });
+  let ready = 0;
+  let loadingCount = 0;
+  let provinceOnlyCount = 0;
+  let unavailable = 2;
+  for (const [isAvailable, isLoading] of [
+    [unemploymentAvailable, state.labourMapLoading],
+    [provincialGdpAvailable, state.economyMapLoading]
+  ]) {
+    if (isLoading) loadingCount += 1;
+    else if (isAvailable && state.boundaryLevel === "ADM1") ready += 1;
+    else if (isAvailable) provinceOnlyCount += 1;
+    else unavailable += 1;
+  }
+  const availability = document.querySelector("#map-more-availability");
+  if (availability) {
+    const summary = [];
+    if (ready) summary.push(`${ready} ready`);
+    if (loadingCount) summary.push(`${loadingCount} loading`);
+    if (provinceOnlyCount) summary.push(`${provinceOnlyCount} province-only`);
+    if (unavailable) summary.push(`${unavailable} unavailable`);
+    availability.textContent = summary.join(" · ");
+  }
 }
 
 function refreshMapStyles() {
