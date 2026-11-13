@@ -276,6 +276,7 @@ a { color: inherit; }
 .population-swatch { border-color: #ab9a67; background: #6b5b39; }
 .growth-swatch { border-color: #57c7c1; background: #426d69; }
 .unemployment-swatch { border-color: #be8171; background: #89574e; }
+.climate-swatch { border-color: #61b7c4; background: #347887; }
 .muted-swatch { border-color: #976c69; background: #674d4a; }
 .services-swatch { border-color: #6e8d7e; background: #476253; }
 .layer-state { grid-column: 2; grid-row: 3; justify-self: start; min-width: 0; color: #a0aca5; font: 10px var(--mono); line-height: 1.3; white-space: normal; overflow-wrap: anywhere; }
