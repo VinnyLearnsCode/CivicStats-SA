@@ -3652,14 +3652,23 @@ function updateNationalProfileSummary() {
   }
 }
 
-function districtCensusPopulation(selected) {
+async function districtCensusPopulation(selected) {
   const members = state.municipalities.filter((item) => item.districtId === selected.id);
-  if (!members.length || state.censusMapRecords.size !== state.municipalities.length) return null;
-  const records = members.map((item) => state.censusMapRecords.get(item.id));
-  if (records.some((record) => !record || !Number.isFinite(record.population2022) || record.population2022 < 0)) return null;
+  if (!members.length) return null;
+  const results = await Promise.allSettled(members.map((item) => getMunicipalityCensus(item.id)));
+  const matched = results.flatMap((result, index) => {
+    const census = result.status === "fulfilled" ? result.value : null;
+    const population = census?.census?.indicators?.total_pop_2022;
+    return Number.isFinite(population) && population >= 0 && hasVerifiedCensusSource(census)
+      ? [{ name: members[index].name, population }]
+      : [];
+  });
+  const matchedNames = new Set(matched.map((item) => item.name));
   return {
-    population: records.reduce((total, record) => total + record.population2022, 0),
-    municipalRecords: records.length
+    population: matched.reduce((total, item) => total + item.population, 0),
+    matchedCount: matched.length,
+    totalCount: members.length,
+    missingNames: members.filter((item) => !matchedNames.has(item.name)).map((item) => item.name)
   };
 }
 
@@ -3726,7 +3735,7 @@ async function updateProfileSummary(selected) {
     : selected.level === "ADM1"
       ? getProvinceCensusPopulation(selected.name)
       : selected.level === "ADM2"
-        ? Promise.resolve(districtCensusPopulation(selected))
+        ? districtCensusPopulation(selected)
       : Promise.resolve(null);
   const labourRequest = state.labourData
     ? Promise.resolve(state.labourData)
@@ -3749,23 +3758,29 @@ async function updateProfileSummary(selected) {
     populationNote.textContent = censusResult.status === "rejected"
       ? `Provincial Census request failed: ${censusResult.reason.message}`
       : "No verified Census population record was returned for this province";
-  } else if (selected.level === "ADM2" && censusResult.status === "fulfilled" && censusResult.value) {
-    population.textContent = formatCensusNumber(censusResult.value.population);
+  } else if (selected.level === "ADM2" && censusResult.status === "fulfilled" && censusResult.value?.matchedCount > 0) {
+    const coverage = censusResult.value;
+    const complete = coverage.matchedCount === coverage.totalCount;
+    population.textContent = complete ? formatCensusNumber(coverage.population) : "PARTIAL";
     populationNote.replaceChildren();
     const sourceAttribution = document.createElement("span");
     sourceAttribution.className = "profile-source-attribution";
     sourceAttribution.textContent = "Stats SA Census 2022";
     const methodNote = document.createElement("span");
-    methodNote.textContent = ` · Derived sum of ${censusResult.value.municipalRecords} matched municipal records; not an official district tabulation`;
+    const missingPreview = coverage.missingNames.slice(0, 3).join(", ");
+    const moreMissing = coverage.missingNames.length > 3 ? ` and ${coverage.missingNames.length - 3} more` : "";
+    methodNote.textContent = complete
+      ? ` · Derived sum · coverage ${coverage.matchedCount}/${coverage.totalCount} municipal records; not an official district tabulation`
+      : ` · Subtotal ${formatCensusNumber(coverage.population)} · coverage ${coverage.matchedCount}/${coverage.totalCount}; missing: ${missingPreview}${moreMissing}`;
     populationNote.append(sourceAttribution, methodNote);
     verifiedIndicators += 1;
     censusLoaded = true;
     censusPeriod = "Census 2022";
   } else if (selected.level === "ADM2") {
-    population.textContent = state.censusMapLoading ? "Loading…" : "Unavailable";
-    populationNote.textContent = state.censusMapLoading
-      ? "Loading verified municipal Census records for this district"
-      : "A complete set of matched municipal Census 2022 records is not available for this district";
+    population.textContent = censusResult.status === "pending" ? "Loading…" : "Unavailable";
+    populationNote.textContent = censusResult.status === "rejected"
+      ? "Census population could not be retrieved for this district"
+      : "No verified municipal Census 2022 population records were found for this district";
   } else if (censusResult.status === "fulfilled" && censusResult.value?.census) {
     const indicators = censusResult.value.census.indicators;
     const officialCode = censusResult.value.census.officialCode;
