@@ -3642,6 +3642,17 @@ function updateNationalProfileSummary() {
   }
 }
 
+function districtCensusPopulation(selected) {
+  const members = state.municipalities.filter((item) => item.districtId === selected.id);
+  if (!members.length || state.censusMapRecords.size !== state.municipalities.length) return null;
+  const records = members.map((item) => state.censusMapRecords.get(item.id));
+  if (records.some((record) => !record || !Number.isFinite(record.population2022) || record.population2022 < 0)) return null;
+  return {
+    population: records.reduce((total, record) => total + record.population2022, 0),
+    municipalRecords: records.length
+  };
+}
+
 function syncOverviewLevelSwitcher() {
   const levelName = ({ national: "National", ADM1: "Province", ADM2: "District / metro", ADM3: "Municipality" })[state.overviewLevel] ?? "National";
   const currentPlace = state.selected?.name ?? (state.overviewLevel === "national" ? "South Africa" : "Select an area");
@@ -3691,7 +3702,9 @@ async function updateProfileSummary(selected) {
   population.textContent = "Loading…";
   populationNote.textContent = selected.level === "ADM1"
     ? "Stats SA provincial Census total"
-    : "Stats SA municipal profile";
+    : selected.level === "ADM2"
+      ? "Derived from matched municipal Census 2022 records"
+      : "Stats SA municipal profile";
   unemployment.textContent = "Loading…";
   unemploymentNote.textContent = "Stats SA QLFS · provincial estimate only";
   status.textContent = "LOADING VERIFIED INDICATORS";
@@ -3702,6 +3715,8 @@ async function updateProfileSummary(selected) {
     ? getMunicipalityCensus(selected.id)
     : selected.level === "ADM1"
       ? getProvinceCensusPopulation(selected.name)
+      : selected.level === "ADM2"
+        ? Promise.resolve(districtCensusPopulation(selected))
       : Promise.resolve(null);
   const labourRequest = state.labourData
     ? Promise.resolve(state.labourData)
@@ -3724,6 +3739,17 @@ async function updateProfileSummary(selected) {
     populationNote.textContent = censusResult.status === "rejected"
       ? `Provincial Census request failed: ${censusResult.reason.message}`
       : "No verified Census population record was returned for this province";
+  } else if (selected.level === "ADM2" && censusResult.status === "fulfilled" && censusResult.value) {
+    population.textContent = formatCensusNumber(censusResult.value.population);
+    populationNote.textContent = `Derived sum of ${censusResult.value.municipalRecords} matched municipal records · Stats SA Census 2022; not an official district tabulation`;
+    verifiedIndicators += 1;
+    censusLoaded = true;
+    censusPeriod = "Census 2022";
+  } else if (selected.level === "ADM2") {
+    population.textContent = state.censusMapLoading ? "Loading…" : "Unavailable";
+    populationNote.textContent = state.censusMapLoading
+      ? "Loading verified municipal Census records for this district"
+      : "A complete set of matched municipal Census 2022 records is not available for this district";
   } else if (censusResult.status === "fulfilled" && censusResult.value?.census) {
     const indicators = censusResult.value.census.indicators;
     const officialCode = censusResult.value.census.officialCode;
@@ -5030,6 +5056,7 @@ async function loadCensusMapData(year) {
     renderNationalMetrics();
     renderNationalHighlights();
     if (!state.selected) updateNationalProfileSummary();
+    else if (state.selected.level === "ADM2") void updateProfileSummary(state.selected);
     if (state.tab === "overview" && !state.selected) renderDetail();
     if (state.view === "municipalities") renderAlternateView();
   } catch (error) {
@@ -5042,6 +5069,7 @@ async function loadCensusMapData(year) {
     renderNationalMetrics();
     renderNationalHighlights();
     if (!state.selected) updateNationalProfileSummary();
+    else if (state.selected.level === "ADM2") void updateProfileSummary(state.selected);
     if (state.tab === "overview" && !state.selected) renderDetail();
     if (state.view === "municipalities") renderAlternateView();
   }
