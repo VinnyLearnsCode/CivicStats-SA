@@ -44,6 +44,13 @@ const state = {
   climateMapPromise: null,
   climateMapError: null,
   climateMapLoading: false,
+  airQualityStations: [],
+  airQualityLoading: false,
+  airQualityError: null,
+  airQualityPromise: null,
+  airQualityCheckedAt: null,
+  airQualityMetadata: null,
+  airQualityLayer: null,
   labourProfileRequestId: 0,
   selected: null,
   municipalities: [],
@@ -3889,7 +3896,7 @@ function baseStyle(feature) {
 }
 
 function selectedStyle(feature) {
-  const missingValue = feature && state.mapLayer !== "boundaries" && mapIndicatorValue(feature) === null;
+  const missingValue = feature && !["boundaries", "airQuality"].includes(state.mapLayer) && mapIndicatorValue(feature) === null;
   return {
     color: "#eafffb",
     weight: 3,
@@ -4098,6 +4105,7 @@ function censusMapRecordForFeature(feature) {
 }
 
 function mapIndicatorValue(feature) {
+  if (state.mapLayer === "airQuality") return null;
   if (state.mapLayer === "unemployment") {
     if (feature.properties.shapeType !== "ADM1") return null;
     const province = canonicalProvinceName(feature.properties.shapeName);
@@ -4133,6 +4141,7 @@ function mapIndicatorValue(feature) {
 }
 
 function activeMapRecords() {
+  if (state.mapLayer === "airQuality") return state.airQualityStations;
   if (state.mapLayer === "unemployment") return [...state.labourMapRecords.values()];
   if (state.mapLayer === "economy") return state.provincialEconomyData?.records ?? [];
   if (["temperature", "precipitation"].includes(state.mapLayer)) return [...state.climateMapRecords.values()];
@@ -4143,6 +4152,7 @@ function activeMapRecords() {
 }
 
 function appendMapCoverage(items) {
+  if (state.mapLayer === "airQuality") return;
   const areas = (state.boundaryLayer?.getLayers() ?? [])
     .map((layer) => layer.feature)
     .filter((feature) => feature?.properties?.shapeID);
@@ -4175,7 +4185,7 @@ function mapIndicatorBreaks() {
 
 function mapStyle(feature) {
   const style = baseStyle(feature);
-  if (state.mapLayer === "boundaries") return style;
+  if (["boundaries", "airQuality"].includes(state.mapLayer)) return style;
   const value = mapIndicatorValue(feature);
   if (value === null) {
     return { ...style, color: "#87938d", fillColor: "url(#civicstats-map-no-data-pattern)", fillOpacity: 1 };
@@ -4229,6 +4239,16 @@ function mapTooltipData(feature) {
       period: "2020 boundary vintage",
       source: "geoBoundaries · OCHA ROSEA / Municipal Demarcation Board",
       note: "Shows the mapped administrative outline, not a statistical value."
+    };
+  }
+  if (state.mapLayer === "airQuality") {
+    return {
+      place: name,
+      indicator: "PM2.5 monitoring stations",
+      value: "Read station markers on the map",
+      period: "Latest available reading per station",
+      source: "OpenAQ · aggregated public monitoring data",
+      note: "This layer shows station observations only. Areas without a station reading are data gaps, not evidence of clean air."
     };
   }
   if (state.mapLayer === "unemployment") {
@@ -4467,6 +4487,40 @@ function renderMapDataTable() {
   const content = document.querySelector("#map-data-table-content");
   if (!panel || panel.hidden || !title || !description || !content) return;
   const presentation = mapTablePresentation();
+  if (state.mapLayer === "airQuality") {
+    title.textContent = `PM2.5 station readings · ${state.airQualityStations.length} stations`;
+    description.textContent = "Latest available OpenAQ PM2.5 observation for each reporting station. Times are supplied by the data provider; missing or old readings do not indicate clean air.";
+    content.replaceChildren();
+    const table = document.createElement("table");
+    table.className = "data-table map-data-table";
+    table.setAttribute("aria-describedby", "map-data-table-description");
+    const caption = document.createElement("caption");
+    caption.textContent = "Latest PM2.5 observation by monitoring station";
+    table.append(caption);
+    const thead = document.createElement("thead");
+    const header = document.createElement("tr");
+    ["Station", "PM2.5 (µg/m³)", "Observed at", "Provider"].forEach((label) => {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = label;
+      header.append(cell);
+    });
+    thead.append(header);
+    const tbody = document.createElement("tbody");
+    state.airQualityStations.slice().sort((left, right) => left.name.localeCompare(right.name)).forEach((station) => {
+      const row = document.createElement("tr");
+      [station.name, formatCensusNumber(station.pm25.value, 2), station.pm25.observedAtLocal, station.provider].forEach((value, index) => {
+        const cell = index === 0 ? document.createElement("th") : document.createElement("td");
+        if (index === 0) cell.scope = "row";
+        cell.textContent = value;
+        row.append(cell);
+      });
+      tbody.append(row);
+    });
+    table.append(thead, tbody);
+    content.append(table);
+    return;
+  }
   const geographyLevel = formatBoundaryLevel(state.boundaryLevel);
   title.textContent = `${presentation.label} · ${geographyLevel}`;
   const aggregateNote = state.boundaryLevel === "ADM3" || state.mapLayer === "boundaries"
@@ -4573,6 +4627,75 @@ function renderMapLegend() {
       items.append(failure);
       addRetryButton(items, () => void loadCensusMapData(state.censusMapYear), "Retry Census data");
     }
+    return;
+  }
+  if (state.mapLayer === "airQuality") {
+    heading.textContent = "STATION PM2.5 · OPENAQ";
+    appendNationalBorderLegend(items);
+    if (state.airQualityLoading) {
+      const loading = document.createElement("span");
+      loading.className = "legend-note";
+      loading.textContent = "Loading latest available PM2.5 station observations…";
+      items.append(loading);
+      return;
+    }
+    if (state.airQualityError) {
+      const message = document.createElement("span");
+      message.className = "legend-note";
+      message.textContent = state.airQualityError === "Air-quality station data is not configured on this server."
+        ? "OpenAQ is not configured yet. Add OPENAQ_API_KEY as a private Render environment variable to load station readings."
+        : "OpenAQ station readings are temporarily unavailable. Try again later.";
+      items.append(message);
+      if (state.airQualityError !== "Air-quality station data is not configured on this server.") {
+        addRetryButton(items, () => void loadAirQualityData(), "Retry station data");
+      }
+    } else if (!state.airQualityStations.length) {
+      const empty = document.createElement("span");
+      empty.className = "legend-note";
+      empty.textContent = "No latest PM2.5 observations were returned for South African stations.";
+      items.append(empty);
+    } else {
+      const fresh = state.airQualityStations.filter((station) =>
+        (Date.now() - Date.parse(station.pm25.observedAtUtc)) / 3600000 <= 48
+      ).length;
+      const coverage = document.createElement("span");
+      coverage.className = "map-coverage-status";
+      coverage.textContent = `${fresh} recent readings · ${state.airQualityStations.length} stations with data`;
+      items.append(coverage);
+      const thresholds = ["≤ 5 µg/m³", "> 5–15 µg/m³", "> 15–25 µg/m³", "> 25–35 µg/m³", "> 35 µg/m³"];
+      thresholds.forEach((range, index) => {
+        const row = document.createElement("span");
+        row.className = "map-legend-range";
+        const swatch = document.createElement("i");
+        swatch.className = "map-legend-swatch air-quality-swatch";
+        swatch.style.backgroundColor = pm25MarkerColor([2, 10, 20, 30, 40][index], false);
+        const label = document.createElement("span");
+        label.textContent = range;
+        row.append(swatch, label);
+        items.append(row);
+      });
+      const staleCount = state.airQualityStations.length - fresh;
+      const staleNote = document.createElement("span");
+      staleNote.className = "legend-note";
+      staleNote.textContent = `${staleCount} readings older than 48 hours · gray markers are stale.`;
+      items.append(staleNote);
+      const checked = document.createElement("span");
+      checked.className = "legend-note";
+      checked.textContent = `Source checked ${new Date(state.airQualityCheckedAt).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" })}.`;
+      items.append(checked);
+      const coverageNote = document.createElement("span");
+      coverageNote.className = "legend-note";
+      const metadata = state.airQualityMetadata;
+      coverageNote.textContent = `Latest values are returned for ${metadata?.stationLocationsReturned ?? state.airQualityStations.length} of ${metadata?.stationLocationsFound ?? state.airQualityStations.length} PM2.5 station locations; ${metadata?.failedLocations ?? 0} station requests failed. Coverage is uneven. No marker is not evidence of clean air.`;
+      items.append(coverageNote);
+    }
+    const sourceLink = document.createElement("a");
+    sourceLink.className = "legend-source-link";
+    sourceLink.href = "https://openaq.org/";
+    sourceLink.target = "_blank";
+    sourceLink.rel = "noopener noreferrer";
+    sourceLink.textContent = "Open OpenAQ source ↗";
+    items.append(sourceLink);
     return;
   }
   if (state.mapLayer === "unemployment") {
@@ -4962,6 +5085,102 @@ async function loadProvincialTemperatureData() {
   return state.climateMapPromise;
 }
 
+async function loadAirQualityData() {
+  if (state.airQualityStations.length) return state.airQualityStations;
+  if (state.airQualityPromise) return state.airQualityPromise;
+  state.airQualityLoading = true;
+  state.airQualityError = null;
+  refreshMapStyles();
+  state.airQualityPromise = getJson("/api/environment/air-quality/pm25")
+    .then((result) => {
+      if (!Array.isArray(result.stations) ||
+        result.source?.publisher !== "OpenAQ · aggregated air-quality observations" ||
+        result.stations.some((station) => !Number.isFinite(station.latitude) ||
+          !Number.isFinite(station.longitude) || !Number.isFinite(station.pm25?.value) ||
+          typeof station.pm25?.observedAtUtc !== "string")) {
+        throw new Error("The air-quality response did not contain valid station readings.");
+      }
+      state.airQualityStations = result.stations;
+      state.airQualityCheckedAt = result.checkedAt;
+      state.airQualityMetadata = result;
+      return state.airQualityStations;
+    })
+    .catch((error) => {
+      state.airQualityStations = [];
+      state.airQualityError = error.message;
+      return null;
+    })
+    .finally(() => {
+      state.airQualityLoading = false;
+      state.airQualityPromise = null;
+      refreshMapStyles();
+    });
+  return state.airQualityPromise;
+}
+
+function pm25MarkerColor(value, stale) {
+  if (stale) return "#87938d";
+  if (value <= 5) return "#54beb4";
+  if (value <= 15) return "#83b96b";
+  if (value <= 25) return "#d3b65f";
+  if (value <= 35) return "#d78e50";
+  return "#cf625f";
+}
+
+function renderAirQualityStations() {
+  if (!state.map) return;
+  if (state.airQualityLayer) {
+    state.map.removeLayer(state.airQualityLayer);
+    state.airQualityLayer = null;
+  }
+  if (state.mapLayer !== "airQuality" || !state.airQualityStations.length) return;
+  const group = L.featureGroup();
+  state.airQualityStations.forEach((station) => {
+    const ageHours = (Date.now() - Date.parse(station.pm25.observedAtUtc)) / 3600000;
+    const stale = !Number.isFinite(ageHours) || ageHours > 48;
+    const color = pm25MarkerColor(station.pm25.value, stale);
+    const marker = L.circleMarker([station.latitude, station.longitude], {
+      radius: 7,
+      color: "#e8f3ef",
+      weight: 1.5,
+      opacity: 1,
+      fillColor: color,
+      fillOpacity: 0.95,
+      bubblingMouseEvents: false,
+      keyboard: true,
+      title: `${station.name}: ${formatCensusNumber(station.pm25.value, 2)} µg/m³`
+    });
+    const popup = document.createElement("div");
+    popup.className = "air-quality-station-popup";
+    const heading = document.createElement("strong");
+    heading.textContent = station.name;
+    const measure = document.createElement("p");
+    measure.textContent = `PM2.5: ${formatCensusNumber(station.pm25.value, 2)} µg/m³${stale ? " · older than 48 hours" : ""}`;
+    const observed = document.createElement("p");
+    observed.textContent = `Observed: ${station.pm25.observedAtLocal}`;
+    const provider = document.createElement("p");
+    provider.textContent = `Reporting provider: ${station.provider}`;
+    const source = document.createElement("a");
+    source.href = "https://openaq.org/";
+    source.target = "_blank";
+    source.rel = "noopener noreferrer";
+    source.textContent = "OpenAQ source ↗";
+    popup.append(heading, measure, observed, provider, source);
+    marker.bindPopup(popup, { maxWidth: 280 });
+    marker.addTo(group);
+  });
+  group.addTo(state.map);
+  state.airQualityLayer = group;
+}
+
+async function activateAirQualityLayer() {
+  state.mapLayer = "airQuality";
+  closeMapPinnedDetail();
+  refreshMapStyles();
+  if (window.matchMedia("(max-width: 900px)").matches) setMobileLayerPickerOpen(false);
+  void loadAirQualityData();
+}
+
 async function loadProvincialGdpData(year = state.economyMapYear) {
   if (state.provincialEconomyData?.year === year) return state.provincialEconomyData;
   if (state.economyLoadPromise && state.economyLoadYear === year) return state.economyLoadPromise;
@@ -5026,6 +5245,7 @@ function updateMapLayerSummary() {
   if (!summary) return;
   const descriptions = {
     boundaries: "Administrative outlines · geoBoundaries 2020. Shows geography only; no statistical value is shaded.",
+    airQuality: "PM2.5 at South African monitoring stations · latest available OpenAQ observation per station. Station coverage is uneven; no marker does not mean clean air.",
     population: `Residents per square kilometre · Census ${state.censusMapYear}. Municipal source values; province and district values are derived from matched municipalities.`,
     growth: "Population change from Census 2011 to Census 2022. Parent-area values are derived from matched municipal totals, not annual growth.",
     unemployment: `Official Stats SA QLFS unemployment estimate · ${state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter}. Province-level only; not a district or municipal rate.`,
@@ -5045,6 +5265,7 @@ function updateMapLayerControls() {
   const provincialGdpAvailable = state.provincialEconomyData?.year === state.economyMapYear &&
     state.provincialEconomyData.records.length === 9;
   const temperatureAvailable = state.climateMapRecords.size === 9;
+  const airQualityAvailable = state.airQualityStations.length > 0;
   const electricityAvailable = censusAvailable &&
     [...state.censusMapRecords.values()].every((record) => Number.isFinite(record.electricityLightingSharePercent));
   const yearSelect = document.querySelector("#map-census-year");
@@ -5061,12 +5282,15 @@ function updateMapLayerControls() {
   if (economySelect) economySelect.value = String(state.economyMapYear);
   document.querySelectorAll('input[name="map-layer"]').forEach((input) => {
     const thematic = input.value !== "boundaries";
+    const airQualityLayer = input.value === "airQuality";
     const provinceOnly = ["unemployment", "economy", "temperature", "precipitation"].includes(input.value);
     const censusLayer = ["population", "growth", "water", "electricity"].includes(input.value);
-    const supported = provinceOnly || censusLayer;
+    const supported = provinceOnly || censusLayer || airQualityLayer;
     const profileDataOnly = ["finance", "infrastructure"].includes(input.value);
     const available = input.value === "unemployment"
       ? unemploymentAvailable
+      : airQualityLayer
+        ? airQualityAvailable
       : input.value === "economy"
         ? provincialGdpAvailable
         : ["temperature", "precipitation"].includes(input.value)
@@ -5082,6 +5306,8 @@ function updateMapLayerControls() {
     const enabled = thematic && supported && available && levelCompatible;
     const loading = input.value === "unemployment"
       ? state.labourMapLoading
+      : airQualityLayer
+        ? state.airQualityLoading
       : input.value === "economy"
         ? state.economyMapLoading
           : ["temperature", "precipitation"].includes(input.value)
@@ -5089,6 +5315,8 @@ function updateMapLayerControls() {
         : state.censusMapLoading;
     const error = input.value === "unemployment"
       ? state.labourMapError
+      : airQualityLayer
+        ? state.airQualityError
       : input.value === "economy"
         ? state.economyMapError
           : ["temperature", "precipitation"].includes(input.value)
@@ -5108,6 +5336,8 @@ function updateMapLayerControls() {
             ? `Verified source data unavailable: ${error}`
             : loading
               ? "Loading verified source data"
+              : airQualityLayer
+                ? "Load latest OpenAQ PM2.5 station readings; add OPENAQ_API_KEY to Render if the source is not configured"
               : ["temperature", "precipitation"].includes(input.value)
                 ? "Load NASA POWER normals by selecting this layer and switching the map to Provinces"
               : "Verified source data is unavailable"
@@ -5117,6 +5347,8 @@ function updateMapLayerControls() {
               : input.value === "economy"
                 ? "Statistics South Africa GDP-R values are available at province level only; choose Provinces"
                 : "NASA POWER climate normals are shown at province level only; choose Provinces"
+              : airQualityLayer
+                ? "Latest PM2.5 observations by monitoring station; source timestamps shown per station"
               : provinceOnly
               ? input.value === "unemployment"
                 ? `Statistics South Africa QLFS ${state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter} provincial data`
@@ -5136,10 +5368,13 @@ function updateMapLayerControls() {
     if (thematic && profileDataOnly) status.textContent = "NO MAP DATA";
     else if (thematic && !supported) status.textContent = "NO DATA";
     else if (thematic && !available && loading) status.textContent = "LOADING";
-    else if (thematic && !available) status.textContent = ["temperature", "precipitation"].includes(input.value) && !state.climateMapError ? "LOAD IN PROVINCES" : "NO DATA";
+    else if (thematic && !available) status.textContent = airQualityLayer
+      ? state.airQualityLoading ? "LOADING" : state.airQualityError ? "NEEDS SETUP" : "LOAD STATIONS"
+      : ["temperature", "precipitation"].includes(input.value) && !state.climateMapError ? "LOAD IN PROVINCES" : "NO DATA";
     else if (thematic && !levelCompatible) status.textContent = "PROVINCE ONLY";
     else if (thematic && input.value === "unemployment") status.textContent = state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter;
     else if (thematic && input.value === "economy") status.textContent = String(state.economyMapYear);
+    else if (thematic && airQualityLayer) status.textContent = `${state.airQualityStations.length} STATIONS`;
     else if (thematic && ["temperature", "precipitation"].includes(input.value)) status.textContent = "NASA POWER";
     else if (thematic && censusLayer) status.textContent = state.boundaryLevel === "ADM3" ? String(state.censusMapYear) : `${state.censusMapYear} · DERIVED`;
     else status.textContent = input.value === state.mapLayer ? "ACTIVE" : "";
@@ -5172,6 +5407,7 @@ function updateMapLayerControls() {
 
 function refreshMapStyles() {
   state.boundaryLayer?.setStyle(styleForFeature);
+  renderAirQualityStations();
   ensureNoDataMapPattern();
   refreshSelectionLayer();
   renderMapLegend();
@@ -6909,6 +7145,8 @@ function bindEvents() {
     button.addEventListener("click", () => {
       if (button.dataset.layerAction === "province") {
         void activateProvinceMapLayer(button.dataset.layer);
+      } else if (button.dataset.layerAction === "air-quality") {
+        void activateAirQualityLayer();
       } else {
         showMapLayerGuidance(button.dataset.layer);
       }
@@ -7086,7 +7324,7 @@ function bindEvents() {
 async function initialize() {
   const sharedParams = new URLSearchParams(location.search);
   const sharedLayer = sharedParams.get("layer");
-  if (["boundaries", "population", "growth", "unemployment", "economy", "water", "electricity", "temperature", "precipitation"].includes(sharedLayer)) {
+  if (["boundaries", "population", "growth", "unemployment", "economy", "water", "electricity", "temperature", "precipitation", "airQuality"].includes(sharedLayer)) {
     state.mapLayer = sharedLayer;
   }
   const sharedCensusYear = Number(sharedParams.get("censusYear"));
@@ -7179,6 +7417,7 @@ async function initialize() {
     renderNationalMetrics();
     setMapLayer(startupCollection);
     if (["temperature", "precipitation"].includes(state.mapLayer)) void loadProvincialTemperatureData();
+    if (state.mapLayer === "airQuality") void loadAirQualityData();
     renderMapComparisonSelection();
     syncBoundaryLevelToZoom();
     document.querySelector("#map-loading").hidden = true;

@@ -194,6 +194,11 @@
                   <p class="map-layer-summary" id="map-layer-summary" aria-live="polite"></p>
                   <details class="layer-more-options">
                     <summary><span>More layers &amp; coverage</span><span class="layer-more-availability" id="map-more-availability">Checking…</span></summary>
+                    <section class="layer-group" aria-label="Station-level air quality data">
+                      <h3 class="layer-group-heading">STATION OBSERVATIONS</h3>
+                      <label class="layer-option unavailable" title="Load latest available PM2.5 readings from OpenAQ monitoring stations"><input type="radio" name="map-layer" value="airQuality" disabled><span class="layer-swatch air-quality-layer-swatch"></span><span class="layer-name">Air quality · PM2.5</span><span class="layer-coverage">Station readings · uneven coverage</span><span class="layer-state">OPENAQ KEY</span></label>
+                      <button class="layer-coverage-action" type="button" data-layer-action="air-quality">Load station readings →</button>
+                    </section>
                     <section class="layer-group" aria-label="Province-only map layers">
                       <h3 class="layer-group-heading">PROVINCE-ONLY LAYERS</h3>
                       <label class="layer-option unavailable" title="Loading Stats SA provincial unemployment estimates"><input type="radio" name="map-layer" value="unemployment" disabled><span class="layer-swatch unemployment-swatch"></span><span class="layer-name">Unemployment</span><span class="layer-coverage">Province only</span><span class="layer-state">LOADING</span></label>

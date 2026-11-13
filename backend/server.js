@@ -14,6 +14,7 @@ const censusDataRoot = resolve(webRoot, "assets", "data");
 const treasuryApiRoot = "https://municipaldata.treasury.gov.za/api";
 const citiesNetworkApiRoot = "https://sacities.net/wp-json/wp/v2";
 const nasaPowerApiRoot = "https://power.larc.nasa.gov/api";
+const openAqApiRoot = "https://api.openaq.org/v3";
 const worldBankApiRoot = "https://api.worldbank.org/v2";
 const providerCacheTtlMs = 5 * 60 * 1000;
 const earthRadiusKm = 6371.0088;
@@ -695,13 +696,13 @@ function treasuryImportMetadata(municipality, year) {
 function createProviderClient(fetchImpl) {
   const cache = new Map();
 
-  async function getJson(url, { timeoutMs = 15000 } = {}) {
+  async function getJson(url, { timeoutMs = 15000, headers = {} } = {}) {
     const key = url.toString();
     const cached = cache.get(key);
     if (cached && Date.now() - cached.fetchedAt < providerCacheTtlMs) return cached.value;
 
     const response = await fetchImpl(key, {
-      headers: { accept: "application/json" },
+      headers: { accept: "application/json", ...headers },
       signal: AbortSignal.timeout(timeoutMs)
     });
     if (!response.ok) throw new Error(`Provider returned HTTP ${response.status}.`);
@@ -1179,6 +1180,88 @@ async function loadNasaPowerClimatology(providerClient, feature) {
   };
 }
 
+async function loadOpenAqPm25Stations(providerClient, apiKey) {
+  const headers = { "X-API-Key": apiKey };
+  const locationsUrl = new URL(`${openAqApiRoot}/locations`);
+  locationsUrl.searchParams.set("iso", "ZA");
+  locationsUrl.searchParams.set("parameters_id", "2");
+  locationsUrl.searchParams.set("limit", "1000");
+  const locationResponse = await providerClient.getJson(locationsUrl, { headers, timeoutMs: 20000 });
+  const locations = Array.isArray(locationResponse?.results) ? locationResponse.results : [];
+  const locationCount = Number(locationResponse?.meta?.found);
+  if (!Number.isFinite(locationCount) || !Array.isArray(locationResponse.results)) {
+    throw new Error("OpenAQ returned an invalid station list.");
+  }
+  const candidates = locations.filter((location) =>
+    Number.isInteger(location.id) &&
+    Number.isFinite(location.coordinates?.latitude) &&
+    Number.isFinite(location.coordinates?.longitude) &&
+    Array.isArray(location.sensors) &&
+    location.sensors.some((sensor) => sensor.parameter?.id === 2 || sensor.parameter?.name === "pm25")
+  );
+  const stations = [];
+  let failedLocations = 0;
+  let cursor = 0;
+  const concurrency = 8;
+  await Promise.all(Array.from({ length: Math.min(concurrency, candidates.length) }, async () => {
+    while (cursor < candidates.length) {
+      const location = candidates[cursor++];
+      const pm25Sensors = location.sensors.filter((sensor) =>
+        sensor.parameter?.id === 2 || sensor.parameter?.name === "pm25"
+      );
+      const sensorById = new Map(pm25Sensors.map((sensor) => [sensor.id, sensor]));
+      try {
+        const latestUrl = new URL(`${openAqApiRoot}/locations/${location.id}/latest`);
+        latestUrl.searchParams.set("limit", "100");
+        const latestResponse = await providerClient.getJson(latestUrl, { headers, timeoutMs: 12000 });
+        const observations = (Array.isArray(latestResponse?.results) ? latestResponse.results : [])
+          .filter((reading) => sensorById.has(reading.sensorsId) &&
+            Number.isFinite(reading.value) && reading.value >= 0 &&
+            Number.isFinite(Date.parse(reading.datetime?.utc)));
+        observations.sort((left, right) => Date.parse(right.datetime.utc) - Date.parse(left.datetime.utc));
+        const reading = observations[0];
+        if (!reading) continue;
+        const sensor = sensorById.get(reading.sensorsId);
+        let concentration = reading.value;
+        const sourceUnit = String(sensor.parameter?.units ?? "").trim().toLocaleLowerCase().replaceAll("μ", "µ");
+        if (sourceUnit === "mg/m³" || sourceUnit === "mg/m3") concentration *= 1000;
+        else if (!new Set(["µg/m³", "µg/m3", "ug/m³", "ug/m3"]).has(sourceUnit)) continue;
+        stations.push({
+          id: location.id,
+          name: location.name || location.locality || `Monitoring station ${location.id}`,
+          latitude: location.coordinates.latitude,
+          longitude: location.coordinates.longitude,
+          provider: location.provider?.name ?? location.owner?.name ?? "Data provider not specified",
+          pm25: {
+            value: Number(concentration.toFixed(2)),
+            unit: "µg/m³",
+            observedAtUtc: reading.datetime.utc,
+            observedAtLocal: reading.datetime.local ?? reading.datetime.utc,
+            sensorId: reading.sensorsId
+          }
+        });
+      } catch {
+        failedLocations += 1;
+      }
+    }
+  }));
+  stations.sort((left, right) => left.name.localeCompare(right.name));
+  return {
+    stations,
+    stationLocationsFound: locationCount,
+    stationLocationsReturned: candidates.length,
+    failedLocations,
+    checkedAt: new Date().toISOString(),
+    source: {
+      publisher: "OpenAQ · aggregated air-quality observations",
+      parameter: "PM2.5",
+      unit: "µg/m³",
+      url: "https://openaq.org/",
+      apiUrl: "https://api.openaq.org/v3/locations"
+    }
+  };
+}
+
 async function loadWorldBankNationalEconomy(providerClient) {
   const definitions = [
     ["gdpCurrentUsd", "NY.GDP.MKTP.CD", "GDP (current US$)", "current US$"],
@@ -1515,7 +1598,8 @@ function sendStaticFile(response, pathname) {
 export async function createAppServer({
   fetchImpl = globalThis.fetch,
   dataStore = createDataStore(),
-  adminToken = process.env.CIVICSTATS_ADMIN_TOKEN
+  adminToken = process.env.CIVICSTATS_ADMIN_TOKEN,
+  openAqApiKey = process.env.OPENAQ_API_KEY
 } = {}) {
   if (adminToken != null &&
     (typeof adminToken !== "string" || Buffer.byteLength(adminToken) < 32)) {
@@ -1524,6 +1608,7 @@ export async function createAppServer({
   const boundaries = await loadBoundaries();
   const sources = JSON.parse(await readFile(resolve(webRoot, "assets", "data-sources.json"), "utf8"));
   const providerClient = createProviderClient(fetchImpl);
+  const configuredOpenAqApiKey = typeof openAqApiKey === "string" ? openAqApiKey.trim() : "";
   const censusMunicipalities = await loadCensusMunicipalities();
   const electricityLighting = await loadElectricityLighting();
   for (const record of censusMunicipalities) {
@@ -1547,6 +1632,8 @@ export async function createAppServer({
     )
   );
   const adminRequests = new Map();
+  let openAqStationsCache = null;
+  let openAqStationsPromise = null;
 
   return createServer((request, response) => {
     configureLocalCors(request, response);
@@ -2186,6 +2273,38 @@ export async function createAppServer({
       void respondFromProvider(response, "NASA POWER climatology", () =>
         loadNasaPowerClimatology(providerClient, feature)
       );
+      return;
+    }
+
+    if (url.pathname === "/api/environment/air-quality/pm25") {
+      if (!configuredOpenAqApiKey) {
+        jsonResponse(response, 503, {
+          error: "Air-quality station data is not configured on this server.",
+          code: "SOURCE_NOT_CONFIGURED"
+        });
+        return;
+      }
+      if (openAqStationsCache && Date.now() - openAqStationsCache.fetchedAt < providerCacheTtlMs) {
+        jsonResponse(response, 200, openAqStationsCache.value);
+        return;
+      }
+      if (!openAqStationsPromise) {
+        openAqStationsPromise = loadOpenAqPm25Stations(providerClient, configuredOpenAqApiKey)
+          .then((value) => {
+            openAqStationsCache = { value, fetchedAt: Date.now() };
+            return value;
+          })
+          .finally(() => { openAqStationsPromise = null; });
+      }
+      void openAqStationsPromise.then((value) => {
+        jsonResponse(response, 200, value);
+      }).catch((error) => {
+        console.error("OpenAQ station data request failed.", providerErrorMessage(error));
+        jsonResponse(response, 503, {
+          error: "Air-quality station readings are temporarily unavailable.",
+          code: "PROVIDER_UNAVAILABLE"
+        });
+      });
       return;
     }
 
