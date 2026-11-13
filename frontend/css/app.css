@@ -400,6 +400,9 @@ a { color: inherit; }
 
 .profile-panel { padding: 13px 14px 0; }
 .overview-level-switcher { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 0 0 12px; padding: 4px; border: 1px solid var(--border-soft); background: #141a18; }
+.overview-current { display: flex; grid-column: 1 / -1; align-items: baseline; flex-wrap: wrap; gap: 6px; padding: 2px 5px 6px; border-bottom: 1px solid var(--border-soft); }
+.overview-current > span { color: #b0bbb5; font: 10px var(--mono); letter-spacing: .08em; }
+.overview-current > strong { min-width: 0; color: #f0bd72; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .overview-level-switcher button { min-width: 0; min-height: 34px; padding: 4px; border: 1px solid transparent; background: transparent; color: #bac4be; cursor: pointer; font-size: 11px; }
 .overview-level-switcher button[aria-pressed="true"] { border-color: #8f6840; background: #30271d; color: #f0bd72; }
 .overview-level-switcher button:hover { border-color: var(--border); color: var(--text); }

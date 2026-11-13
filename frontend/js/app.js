@@ -3541,6 +3541,7 @@ function renderGeographyChildren(selected) {
 
 function updateNationalProfileSummary() {
   if (state.selected) return;
+  syncOverviewLevelSwitcher();
   const profilePanel = document.querySelector("#profile-panel");
   const prompt = document.querySelector("#overview-scope-prompt");
   if (state.overviewLevel !== "national") {
@@ -3642,6 +3643,10 @@ function updateNationalProfileSummary() {
 }
 
 function syncOverviewLevelSwitcher() {
+  const levelName = ({ national: "National", ADM1: "Province", ADM2: "District / metro", ADM3: "Municipality" })[state.overviewLevel] ?? "National";
+  const currentPlace = state.selected?.name ?? (state.overviewLevel === "national" ? "South Africa" : "Select an area");
+  const placeLabel = document.querySelector("#overview-current-place");
+  if (placeLabel) placeLabel.textContent = `${levelName} · ${currentPlace}`;
   document.querySelectorAll("[data-overview-level]").forEach((button) => {
     const active = button.dataset.overviewLevel === state.overviewLevel;
     button.setAttribute("aria-pressed", String(active));
