@@ -3741,7 +3741,13 @@ async function updateProfileSummary(selected) {
       : "No verified Census population record was returned for this province";
   } else if (selected.level === "ADM2" && censusResult.status === "fulfilled" && censusResult.value) {
     population.textContent = formatCensusNumber(censusResult.value.population);
-    populationNote.textContent = `Derived sum of ${censusResult.value.municipalRecords} matched municipal records · Stats SA Census 2022; not an official district tabulation`;
+    populationNote.replaceChildren();
+    const sourceAttribution = document.createElement("span");
+    sourceAttribution.className = "profile-source-attribution";
+    sourceAttribution.textContent = "Stats SA Census 2022";
+    const methodNote = document.createElement("span");
+    methodNote.textContent = ` · Derived sum of ${censusResult.value.municipalRecords} matched municipal records; not an official district tabulation`;
+    populationNote.append(sourceAttribution, methodNote);
     verifiedIndicators += 1;
     censusLoaded = true;
     censusPeriod = "Census 2022";
