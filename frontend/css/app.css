@@ -247,7 +247,8 @@ a { color: inherit; }
 .layer-control.layer-control-collapsed .layer-option-list .layer-coverage-action,
 .layer-control.layer-control-collapsed .layer-option-list .map-layer-help,
 .layer-control.layer-control-collapsed .map-display-settings,
-.layer-control.layer-control-collapsed .layer-more-options { display: none; }
+.layer-control.layer-control-collapsed .layer-more-options,
+.layer-control.layer-control-collapsed .map-layer-summary { display: none; }
 .layer-group + .layer-group { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-soft); }
 .layer-more-options { margin-top: 6px; border-top: 1px solid var(--border-soft); }
 .layer-more-options > summary { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 2px; color: #c4cec8; cursor: pointer; font-size: 12px; list-style: none; }
@@ -255,6 +256,7 @@ a { color: inherit; }
 .layer-more-options > summary::-webkit-details-marker { display: none; }
 .layer-more-options > summary::after { content: "+"; color: #f0bd72; font: 16px var(--mono); }
 .layer-more-options[open] > summary::after { content: "−"; }
+.map-layer-summary { margin: 7px 0; padding: 8px; border-left: 2px solid #f0bd72; background: #1b201d; color: #c1cbc5; font-size: 12px; line-height: 1.5; }
 .layer-group-heading { margin: 2px 0 4px; color: #718078; font: 7px var(--mono); letter-spacing: .07em; }
 .control-title, .legend-heading { display: block; margin-bottom: 6px; color: #85918b; font: 8px var(--mono); letter-spacing: .08em; }
 .map-period-label { display: flex; align-items: center; justify-content: space-between; margin: 3px 0 6px; color: #85918b; font: 7px var(--mono); letter-spacing: .06em; }
@@ -720,7 +722,8 @@ a { color: inherit; }
   .layer-control:not(.mobile-layer-open) .layer-option-list .layer-coverage-action,
   .layer-control:not(.mobile-layer-open) .layer-option-list .map-layer-help,
   .layer-control:not(.mobile-layer-open) .map-display-settings,
-  .layer-control:not(.mobile-layer-open) .layer-more-options { display: none; }
+  .layer-control:not(.mobile-layer-open) .layer-more-options,
+  .layer-control:not(.mobile-layer-open) .map-layer-summary { display: none; }
   .layer-control:not(.mobile-layer-open) .layer-control-heading .control-title { margin: 0; white-space: nowrap; }
   .map-top-left { max-width: calc(100% - 205px); }
   .map-zoom-path { max-width: 100%; }

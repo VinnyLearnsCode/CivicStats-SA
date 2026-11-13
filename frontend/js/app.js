@@ -4881,6 +4881,21 @@ async function loadProvincialGdpData(year = state.economyMapYear) {
   return state.economyLoadPromise;
 }
 
+function updateMapLayerSummary() {
+  const summary = document.querySelector("#map-layer-summary");
+  if (!summary) return;
+  const descriptions = {
+    boundaries: "Administrative outlines · geoBoundaries 2020. Shows geography only; no statistical value is shaded.",
+    population: `Residents per square kilometre · Census ${state.censusMapYear}. Municipal source values; province and district values are derived from matched municipalities.`,
+    growth: "Population change from Census 2011 to Census 2022. Parent-area values are derived from matched municipal totals, not annual growth.",
+    unemployment: `Official Stats SA QLFS unemployment estimate · ${state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter}. Province-level only; not a district or municipal rate.`,
+    economy: `Official Stats SA GDP-R · ${state.economyMapYear}. Shows each province’s share of national GDP; no district or municipal GDP-R values are published here.`,
+    electricity: `Households reporting electricity as their main lighting source · Census ${state.censusMapYear}. Municipal source percentages; larger-area values are approximate weighted aggregates.`,
+    water: `Households reporting a water-scheme source · Census ${state.censusMapYear}. Municipal source counts; larger-area shares are derived aggregates.`
+  };
+  summary.textContent = descriptions[state.mapLayer] ?? "Select a map layer to see what it measures and how its values are reported.";
+}
+
 function updateMapLayerControls() {
   const censusAvailable = state.censusMapRecords.size === state.municipalities.length && state.municipalities.length > 0;
   const growthAvailable = censusAvailable && state.populationGrowthLayerAvailable;
@@ -4993,6 +5008,7 @@ function updateMapLayerControls() {
     if (unavailable) summary.push(`${unavailable} unavailable`);
     availability.textContent = summary.join(" · ");
   }
+  updateMapLayerSummary();
 }
 
 function refreshMapStyles() {
