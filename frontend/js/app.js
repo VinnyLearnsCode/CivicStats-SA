@@ -3479,6 +3479,11 @@ function updateProfile(selected) {
     (selected.category ?? levelLabel).toUpperCase();
   document.querySelector("#profile-population-label").textContent =
     `POPULATION · ${levelLabel} · CENSUS 2022`;
+  const populationQuality = document.querySelector("#profile-population-quality");
+  populationQuality.textContent = selected.level === "ADM2" ? "DERIVED" : "OFFICIAL";
+  populationQuality.classList.toggle("derived", selected.level === "ADM2");
+  populationQuality.classList.toggle("official", selected.level !== "ADM2");
+  document.querySelector("#profile-area-quality").textContent = "APPROX.";
   document.querySelector("#profile-area").textContent = formatArea(selected.areaKm2);
   document.querySelector("#profile-area-note").textContent = selected.areaKm2 == null
     ? "Not calculated for this boundary"
@@ -3574,6 +3579,11 @@ function updateNationalProfileSummary() {
   document.querySelector("#profile-boundary-label").textContent = "GEOGRAPHY SCOPE";
   document.querySelector("#profile-boundary-id").textContent = "South Africa · national";
   document.querySelector("#profile-population-label").textContent = "POPULATION · CENSUS 2022";
+  const populationQuality = document.querySelector("#profile-population-quality");
+  populationQuality.textContent = "OFFICIAL";
+  populationQuality.classList.remove("derived");
+  populationQuality.classList.add("official");
+  document.querySelector("#profile-area-quality").textContent = "APPROX.";
   document.querySelector("#profile-population-note").textContent = state.nationalCensusPopulation2022
     ? `${state.nationalCensusPopulation2022.source.publisher} · Census 2022 · official national total`
     : state.nationalCensusPopulationError

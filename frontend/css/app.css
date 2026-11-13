@@ -436,6 +436,11 @@ a { color: inherit; }
 .profile-stat-grid > div:nth-child(odd) { border-right: 1px solid var(--border-soft); }
 .profile-stat-grid > div:nth-child(even) { padding-left: 12px; }
 .profile-stat-grid span, .profile-stat-grid small { display: block; color: #7f8b85; font: 7px var(--mono); letter-spacing: .04em; }
+.profile-metric-heading { display: flex; min-height: 20px; align-items: flex-start; justify-content: space-between; gap: 5px; }
+.profile-stat-grid .profile-metric-heading > span:first-child { min-width: 0; line-height: 1.35; }
+.profile-stat-grid .quality-badge { display: inline-flex; flex: 0 0 auto; align-items: center; padding: 2px 4px; border: 1px solid #547c76; background: #1a2c28; color: #a5ddd4; font: 8px var(--mono); letter-spacing: .04em; }
+.profile-stat-grid .quality-badge.derived { border-color: #8f6840; background: #30271d; color: #f0bd72; }
+.profile-stat-grid .quality-badge.approximate { border-color: #626c67; background: #242a27; color: #c0c9c3; }
 .profile-stat-grid strong { display: block; margin: 6px 0 3px; color: #d3dad6; font: 15px var(--mono); }
 .profile-stat-grid strong.unscored { color: var(--amber); font-size: 10px; }
 .profile-stat-grid strong.civic-score-value { color: var(--accent); font-size: 14px; }
