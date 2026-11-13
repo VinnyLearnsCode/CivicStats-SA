@@ -323,11 +323,18 @@
 
           <aside class="context-column" aria-label="Selected geography">
             <section class="panel profile-panel" id="profile-panel">
+              <nav class="overview-level-switcher" aria-label="Overview geography">
+                <button type="button" data-overview-level="national" aria-pressed="true">National</button>
+                <button type="button" data-overview-level="ADM1" aria-pressed="false">Province</button>
+                <button type="button" data-overview-level="ADM2" aria-pressed="false">District</button>
+                <button type="button" data-overview-level="ADM3" aria-pressed="false">Municipality</button>
+              </nav>
               <div class="profile-topline"><span class="panel-kicker" id="profile-scope-label">NATIONAL OVERVIEW</span><span class="profile-type" id="profile-type">COUNTRYWIDE</span></div>
               <div class="profile-title">
                 <div class="profile-pin">⌖</div>
                 <div><h2 id="profile-name">South Africa</h2><p id="profile-location">National administrative overview</p></div>
               </div>
+              <p class="overview-scope-prompt" id="overview-scope-prompt" role="status" hidden></p>
               <div class="profile-code-row"><span id="profile-code-label">ADMINISTRATIVE COVERAGE</span><code id="profile-code">9 provinces · 213 municipalities</code></div>
               <div class="profile-code-row"><span id="profile-boundary-label">GEOGRAPHY SCOPE</span><code id="profile-boundary-id">South Africa · national</code></div>
               <div class="profile-divider"></div>

@@ -6,6 +6,7 @@ const state = {
   autoBoundaryReady: false,
   autoBoundaryRequest: null,
   mapLayer: "population",
+  overviewLevel: "national",
   mapDetailMode: false,
   mapHoverPreviews: true,
   mapDataTableOpen: false,
@@ -3452,6 +3453,10 @@ function renderProjectRecords(parent, result, typeSelect) {
 
 function updateProfile(selected) {
   state.selected = selected;
+  state.overviewLevel = selected.level;
+  syncOverviewLevelSwitcher();
+  document.querySelector("#profile-panel").classList.remove("scope-awaiting-selection");
+  document.querySelector("#overview-scope-prompt").hidden = true;
   if (!selected) return;
   document.querySelector("#fit-map").hidden = false;
   profileName.textContent = selected.name;
@@ -3536,6 +3541,22 @@ function renderGeographyChildren(selected) {
 
 function updateNationalProfileSummary() {
   if (state.selected) return;
+  const profilePanel = document.querySelector("#profile-panel");
+  const prompt = document.querySelector("#overview-scope-prompt");
+  if (state.overviewLevel !== "national") {
+    const levelName = ({ ADM1: "province", ADM2: "district or metro", ADM3: "municipality" })[state.overviewLevel];
+    profilePanel.classList.add("scope-awaiting-selection");
+    document.querySelector("#profile-scope-label").textContent = `${levelName.toUpperCase()} OVERVIEW`;
+    document.querySelector("#profile-type").textContent = "CHOOSE AN AREA";
+    document.querySelector("#profile-name").textContent = `Select a ${levelName}`;
+    document.querySelector("#profile-location").textContent = "Choose an area on the map to view its verified statistics.";
+    prompt.hidden = false;
+    prompt.textContent = `The map is showing ${levelName} boundaries. Select one to load its overview.`;
+    syncOverviewLevelSwitcher();
+    return;
+  }
+  profilePanel.classList.remove("scope-awaiting-selection");
+  prompt.hidden = true;
   const provinces = state.geographies.filter((item) => item.level === "ADM1");
   const provinceCount = provinces.length;
   const municipalityCount = state.municipalities.length;
@@ -3618,6 +3639,13 @@ function updateNationalProfileSummary() {
       updateNationalProfileSummary();
     });
   }
+}
+
+function syncOverviewLevelSwitcher() {
+  document.querySelectorAll("[data-overview-level]").forEach((button) => {
+    const active = button.dataset.overviewLevel === state.overviewLevel;
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 function clearGeographySelection() {
@@ -5325,6 +5353,8 @@ function openComparisonWithMunicipality(id) {
 }
 
 function resetMapToNational() {
+  state.overviewLevel = "national";
+  syncOverviewLevelSwitcher();
   closeMapPinnedDetail();
   if (state.view !== "dashboard") setView("dashboard");
   state.autoBoundaryDetail = true;
@@ -6496,6 +6526,31 @@ function updateActiveSearchResult(index) {
 }
 
 function bindEvents() {
+  document.querySelectorAll("[data-overview-level]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const level = button.dataset.overviewLevel;
+      if (level === "national") {
+        resetMapToNational();
+        return;
+      }
+      state.overviewLevel = level;
+      state.autoBoundaryDetail = false;
+      document.querySelector("#auto-boundary-detail").checked = false;
+      document.querySelector("#boundary-level").value = level;
+      syncOverviewLevelSwitcher();
+      closeMapPinnedDetail();
+      try {
+        if (state.view !== "dashboard") setView("dashboard");
+        if (state.boundaryLevel !== level) await changeBoundaryLevel(level);
+        clearGeographySelection();
+        if (state.map) state.map.fitBounds(state.boundaryLayer.getBounds(), { padding: [30, 30], maxZoom: 6 });
+      } catch (error) {
+        state.overviewLevel = "national";
+        syncOverviewLevelSwitcher();
+        showToast(`Could not load that overview level: ${error.message}`);
+      }
+    });
+  });
   const compactMapViewport = window.matchMedia("(max-width: 900px)");
   setMobileLayerPickerOpen(!compactMapViewport.matches);
   compactMapViewport.addEventListener("change", (event) => setMobileLayerPickerOpen(!event.matches));
