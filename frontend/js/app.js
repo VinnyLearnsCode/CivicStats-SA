@@ -4489,7 +4489,7 @@ function renderMapDataTable() {
   const presentation = mapTablePresentation();
   if (state.mapLayer === "airQuality") {
     title.textContent = `PM2.5 station readings · ${state.airQualityStations.length} stations`;
-    description.textContent = "Latest available OpenAQ PM2.5 observation for each reporting station. Times are supplied by the data provider; missing or old readings do not indicate clean air.";
+    description.textContent = "Latest available PM2.5 reading per OpenAQ location. Observation times are shown in South African time; missing or old readings do not indicate clean air.";
     content.replaceChildren();
     const table = document.createElement("table");
     table.className = "data-table map-data-table";
@@ -4499,7 +4499,7 @@ function renderMapDataTable() {
     table.append(caption);
     const thead = document.createElement("thead");
     const header = document.createElement("tr");
-    ["Station", "PM2.5 (µg/m³)", "Observed at", "Provider"].forEach((label) => {
+    ["OpenAQ location", "PM2.5 (µg/m³)", "Observed (SAST)", "Sensor ID"].forEach((label) => {
       const cell = document.createElement("th");
       cell.scope = "col";
       cell.textContent = label;
@@ -4509,7 +4509,8 @@ function renderMapDataTable() {
     const tbody = document.createElement("tbody");
     state.airQualityStations.slice().sort((left, right) => left.name.localeCompare(right.name)).forEach((station) => {
       const row = document.createElement("tr");
-      [station.name, formatCensusNumber(station.pm25.value, 2), station.pm25.observedAtLocal, station.provider].forEach((value, index) => {
+      const observedAt = new Date(station.pm25.observedAtUtc).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" });
+      [station.name, formatCensusNumber(station.pm25.value, 2), observedAt, String(station.pm25.sensorId)].forEach((value, index) => {
         const cell = index === 0 ? document.createElement("th") : document.createElement("td");
         if (index === 0) cell.scope = "row";
         cell.textContent = value;
@@ -5161,15 +5162,17 @@ function renderAirQualityStations() {
     const measure = document.createElement("p");
     measure.textContent = `PM2.5: ${formatCensusNumber(station.pm25.value, 2)} µg/m³${stale ? " · older than 48 hours" : ""}`;
     const observed = document.createElement("p");
-    observed.textContent = `Observed: ${station.pm25.observedAtLocal}`;
-    const provider = document.createElement("p");
-    provider.textContent = `Reporting provider: ${station.provider}`;
+    observed.textContent = `Observed (South African time): ${new Date(station.pm25.observedAtUtc).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" })}`;
+    const sensor = document.createElement("p");
+    sensor.textContent = `OpenAQ sensor ID: ${station.pm25.sensorId}`;
+    const coordinates = document.createElement("p");
+    coordinates.textContent = `Coordinates: ${station.latitude.toFixed(4)}, ${station.longitude.toFixed(4)}`;
     const source = document.createElement("a");
     source.href = "https://openaq.org/";
     source.target = "_blank";
     source.rel = "noopener noreferrer";
     source.textContent = "OpenAQ source ↗";
-    popup.append(heading, measure, observed, provider, source);
+    popup.append(heading, measure, observed, sensor, coordinates, source);
     marker.bindPopup(popup, { maxWidth: 280 });
     marker.addTo(group);
   });

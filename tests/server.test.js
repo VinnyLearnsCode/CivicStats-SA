@@ -147,6 +147,9 @@ test("air-quality endpoint filters OpenAQ PM2.5 readings to South African statio
     assert.equal(sentHeaders["X-API-Key"], apiKey);
     assert.equal(result.stations.length, 1);
     assert.equal(result.stations[0].id, 77);
+    assert.equal(result.stations[0].name, "OpenAQ location 77");
+    assert.equal(result.stations[0].pm25.sensorId, 7702);
+    assert.equal(result.stations[0].latitude, -26.2041);
     assert.equal(result.stations[0].pm25.value, 12.3);
     assert.equal(result.stations[0].pm25.observedAtUtc, "2026-11-12T11:00:00Z");
     assert.equal(body.includes(apiKey), false);
@@ -554,7 +557,7 @@ test("the stylesheet, browser application and bundled source catalogue are serve
   assert.match(indexHtml, /role="combobox" aria-autocomplete="list"/);
   assert.match(indexHtml, /map-data-table-toggle/);
   assert.match(indexHtml, /export-map-table/);
-  assert.match(indexHtml, /SOUTH AFRICA AT A GLANCE/);
+  assert.match(indexHtml, /SOUTH AFRICA · NATIONAL SNAPSHOT/);
   assert.match(indexHtml, /id="share-view-button"/);
   assert.match(indexHtml, /id="profile-civicscore"/);
   assert.match(indexHtml, /CIVICSCORE · BASIC SERVICES PILOT/);

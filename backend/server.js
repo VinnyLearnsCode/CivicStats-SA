@@ -1207,10 +1207,9 @@ async function loadOpenAqPm25Stations(providerClient, apiKey, provinceBoundaries
   }
   const stations = [...readingsByLocation.entries()].map(([locationId, reading]) => ({
     id: locationId,
-    name: `OpenAQ station ${locationId}`,
+    name: `OpenAQ location ${locationId}`,
     latitude: reading.coordinates.latitude,
     longitude: reading.coordinates.longitude,
-    provider: "OpenAQ contributing data source",
     pm25: {
       value: Number(reading.value.toFixed(2)),
       unit: "µg/m³",
