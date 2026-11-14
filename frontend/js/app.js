@@ -1,3 +1,5 @@
+const OPENAQ_SETUP_ERROR = "Air-quality station data is not configured on this server.";
+
 const state = {
   view: "dashboard",
   tab: "overview",
@@ -4660,11 +4662,11 @@ function renderMapLegend() {
     if (state.airQualityError) {
       const message = document.createElement("span");
       message.className = "legend-note";
-      message.textContent = state.airQualityError === "Air-quality station data is not configured on this server."
+      message.textContent = state.airQualityError === OPENAQ_SETUP_ERROR
         ? "OpenAQ is not configured yet. Add OPENAQ_API_KEY as a private Render environment variable to load station readings."
         : "OpenAQ station readings are temporarily unavailable. Try again later.";
       items.append(message);
-      if (state.airQualityError !== "Air-quality station data is not configured on this server.") {
+      if (state.airQualityError !== OPENAQ_SETUP_ERROR) {
         addRetryButton(items, () => void loadAirQualityData(), "Retry station data");
       }
     } else if (!state.airQualityStations.length) {
@@ -5008,6 +5010,7 @@ function setLabourQuarter(quarter) {
 async function loadProvincialLabourData() {
   if (state.labourData) return state.labourData;
   if (state.labourLoadPromise) return state.labourLoadPromise;
+  clearMapLayerErrorGuidance("unemployment");
   state.labourMapLoading = true;
   state.labourMapError = null;
   refreshMapStyles();
@@ -5056,6 +5059,7 @@ async function loadProvincialLabourData() {
     .catch((error) => {
       state.labourMapError = error.message;
       state.labourMapRecords = new Map();
+      if (state.mapLayer === "unemployment") showMapLayerErrorGuidance("unemployment", error.message);
       return null;
     })
     .finally(() => {
@@ -5074,9 +5078,13 @@ async function loadProvincialLabourData() {
 async function loadProvincialTemperatureData() {
   if (state.climateMapRecords.size === 9) return state.climateMapRecords;
   if (state.climateMapPromise) return state.climateMapPromise;
+  clearMapLayerErrorGuidance(state.mapLayer);
   const provinces = state.collections.get("ADM1")?.features ?? [];
   if (provinces.length !== 9) {
     state.climateMapError = "Province boundary data is unavailable.";
+    if (["temperature", "precipitation"].includes(state.mapLayer)) {
+      showMapLayerErrorGuidance(state.mapLayer, state.climateMapError);
+    }
     return null;
   }
   state.climateMapLoading = true;
@@ -5096,6 +5104,9 @@ async function loadProvincialTemperatureData() {
   }).catch((error) => {
     state.climateMapError = error.message;
     state.climateMapRecords = new Map();
+    if (["temperature", "precipitation"].includes(state.mapLayer)) {
+      showMapLayerErrorGuidance(state.mapLayer, error.message);
+    }
     return null;
   }).finally(() => {
     state.climateMapLoading = false;
@@ -5110,6 +5121,7 @@ async function loadProvincialTemperatureData() {
 async function loadAirQualityData() {
   if (state.airQualityStations.length) return state.airQualityStations;
   if (state.airQualityPromise) return state.airQualityPromise;
+  clearMapLayerErrorGuidance("airQuality");
   state.airQualityLoading = true;
   state.airQualityError = null;
   refreshMapStyles();
@@ -5130,6 +5142,7 @@ async function loadAirQualityData() {
     .catch((error) => {
       state.airQualityStations = [];
       state.airQualityError = error.message;
+      if (state.mapLayer === "airQuality") showMapLayerErrorGuidance("airQuality", error.message);
       return null;
     })
     .finally(() => {
@@ -5215,6 +5228,8 @@ function renderAirQualityStations() {
 }
 
 async function activateAirQualityLayer() {
+  const help = document.querySelector("#map-layer-help");
+  if (help) help.hidden = true;
   state.mapLayer = "airQuality";
   closeMapPinnedDetail();
   refreshMapStyles();
@@ -5225,6 +5240,7 @@ async function activateAirQualityLayer() {
 async function loadProvincialGdpData(year = state.economyMapYear) {
   if (state.provincialEconomyData?.year === year) return state.provincialEconomyData;
   if (state.economyLoadPromise && state.economyLoadYear === year) return state.economyLoadPromise;
+  clearMapLayerErrorGuidance("economy");
   const requestId = ++state.economyMapRequestId;
   state.economyMapYear = year;
   state.provincialEconomyData = null;
@@ -5265,6 +5281,7 @@ async function loadProvincialGdpData(year = state.economyMapYear) {
       if (requestId === state.economyMapRequestId) {
         state.economyMapError = error.message;
         state.provincialEconomyData = null;
+        if (state.mapLayer === "economy") showMapLayerErrorGuidance("economy", error.message);
       }
       return null;
     })
@@ -5410,7 +5427,7 @@ function updateMapLayerControls() {
     else if (thematic && !supported) status.textContent = "NO DATA";
     else if (thematic && !available && loading) status.textContent = "LOADING";
     else if (thematic && !available) status.textContent = airQualityLayer
-      ? state.airQualityLoading ? "LOADING" : state.airQualityError ? "NEEDS SETUP" : "LOAD STATIONS"
+      ? state.airQualityLoading ? "LOADING" : state.airQualityError === OPENAQ_SETUP_ERROR ? "NEEDS SETUP" : state.airQualityError ? "RETRY" : "LOAD STATIONS"
       : ["temperature", "precipitation"].includes(input.value) && !state.climateMapError ? "LOAD IN PROVINCES" : "NO DATA";
     else if (thematic && !levelCompatible) status.textContent = "PROVINCE ONLY";
     else if (thematic && input.value === "unemployment") status.textContent = state.labourData?.periods.find((period) => period.code === state.labourQuarter)?.label ?? state.labourQuarter;
@@ -5420,6 +5437,71 @@ function updateMapLayerControls() {
     else if (thematic && censusLayer) status.textContent = state.boundaryLevel === "ADM3" ? String(state.censusMapYear) : `${state.censusMapYear} · DERIVED`;
     else status.textContent = input.value === state.mapLayer ? "ACTIVE" : "";
   });
+  const provinceActions = {
+    unemployment: {
+      label: "unemployment",
+      available: unemploymentAvailable,
+      loading: state.labourMapLoading,
+      error: state.labourMapError
+    },
+    economy: {
+      label: "GDP-R",
+      available: provincialGdpAvailable,
+      loading: state.economyMapLoading,
+      error: state.economyMapError
+    },
+    temperature: {
+      label: "temperature",
+      available: temperatureAvailable,
+      loading: state.climateMapLoading,
+      error: state.climateMapError
+    },
+    precipitation: {
+      label: "precipitation",
+      available: temperatureAvailable,
+      loading: state.climateMapLoading,
+      error: state.climateMapError
+    }
+  };
+  document.querySelectorAll('.layer-coverage-action[data-layer-action="province"]').forEach((button) => {
+    const source = provinceActions[button.dataset.layer];
+    if (!source) return;
+    const atProvinces = state.boundaryLevel === "ADM1";
+    button.disabled = atProvinces && source.loading;
+    button.textContent = !atProvinces
+      ? "Switch map to provinces →"
+      : source.loading
+        ? `Loading ${source.label}…`
+        : source.error
+          ? `Retry ${source.label} data →`
+          : source.available
+            ? `Show ${source.label} →`
+            : `Load ${source.label} →`;
+    button.title = source.error
+      ? `${source.error} Activate to retry.`
+      : atProvinces
+        ? `Show ${source.label} on province boundaries.`
+        : `This layer is only available at province level. Activate to switch the map to provinces.`;
+  });
+  const airQualityAction = document.querySelector('.layer-coverage-action[data-layer-action="air-quality"]');
+  if (airQualityAction) {
+    const setupRequired = state.airQualityError === OPENAQ_SETUP_ERROR;
+    airQualityAction.disabled = state.airQualityLoading || setupRequired;
+    airQualityAction.textContent = state.airQualityLoading
+      ? "Loading station readings…"
+      : setupRequired
+        ? "OpenAQ setup required"
+        : state.airQualityError
+          ? "Retry station readings →"
+          : airQualityAvailable
+            ? "Show station readings →"
+            : "Load station readings →";
+    airQualityAction.title = setupRequired
+      ? "OpenAQ is not configured on this server. A site administrator must add OPENAQ_API_KEY to Render."
+      : state.airQualityError
+        ? `${state.airQualityError} Activate to retry.`
+        : "Load the latest available PM2.5 readings from OpenAQ monitoring stations.";
+  }
   let ready = 0;
   let loadingCount = 0;
   let provinceOnlyCount = 0;
@@ -5460,11 +5542,61 @@ function refreshMapStyles() {
 function showMapLayerGuidance(layer) {
   const help = document.querySelector("#map-layer-help");
   if (!help) return;
+  help.dataset.layer = layer;
   help.textContent = layer === "finance"
     ? "Municipal finance and audit records load in municipality profiles. Select a municipality, then open its profile; a complete compatible national finance measure is not available for map shading."
     : "A complete, period-compatible infrastructure indicator is not available for map shading. Use Projects for named project records, or Service delivery for Census household-access measures.";
   help.hidden = false;
   setMobileLayerPickerOpen(true);
+}
+
+function showMapLayerErrorGuidance(layer, error) {
+  const help = document.querySelector("#map-layer-help");
+  if (!help) return;
+  help.dataset.layer = layer;
+  const layerNames = {
+    population: "Census population-density data",
+    growth: "Census population-change data",
+    water: "Census water-service data",
+    electricity: "Census electricity-for-lighting data",
+    unemployment: "Stats SA provincial unemployment data",
+    economy: "Stats SA provincial GDP-R data",
+    temperature: "NASA POWER temperature data",
+    precipitation: "NASA POWER precipitation data",
+    airQuality: "OpenAQ PM2.5 station readings"
+  };
+  const provinceActionLabels = {
+    unemployment: "unemployment data",
+    economy: "GDP-R data",
+    temperature: "temperature data",
+    precipitation: "precipitation data"
+  };
+  const reason = error.replace(/[.!?]+$/, "");
+  if (layer === "airQuality" && error === OPENAQ_SETUP_ERROR) {
+    help.textContent = "OpenAQ is not configured on this server. A site administrator must add OPENAQ_API_KEY as a private Render environment variable; retrying will not help until setup is complete.";
+  } else {
+    const retryAction = layer === "airQuality"
+      ? "Select Retry station readings above to try again."
+      : ["population", "growth", "water", "electricity"].includes(layer)
+        ? "Use Retry Census data in the map key to try again."
+        : `Select Retry ${provinceActionLabels[layer] ?? "data"} above to try again.`;
+    help.textContent = `${layerNames[layer] ?? "Map data"} could not be loaded: ${reason}. ${retryAction}`;
+  }
+  help.hidden = false;
+  setMobileLayerPickerOpen(true);
+}
+
+function clearMapLayerErrorGuidance(layer) {
+  const help = document.querySelector("#map-layer-help");
+  if (!help) return;
+  const censusLayers = ["population", "growth", "water", "electricity"];
+  const matches = layer === "census"
+    ? censusLayers.includes(help.dataset.layer)
+    : help.dataset.layer === layer;
+  if (matches) {
+    help.hidden = true;
+    delete help.dataset.layer;
+  }
 }
 
 function setMobileLayerPickerOpen(open) {
@@ -5513,6 +5645,7 @@ async function activateProvinceMapLayer(layer) {
 }
 
 async function loadCensusMapData(year) {
+  clearMapLayerErrorGuidance("census");
   const requestId = ++state.censusMapRequestId;
   state.censusMapYear = year;
   state.censusMapRecords = new Map();
@@ -5556,11 +5689,15 @@ async function loadCensusMapData(year) {
     if (state.view === "municipalities") renderAlternateView();
   } catch (error) {
     if (requestId !== state.censusMapRequestId) return;
+    const failedLayer = state.mapLayer;
     state.censusMapError = error.message;
     state.censusMapLoading = false;
     state.populationGrowthLayerAvailable = false;
     if (["population", "growth", "water", "electricity"].includes(state.mapLayer)) state.mapLayer = "boundaries";
     refreshMapStyles();
+    if (["population", "growth", "water", "electricity"].includes(failedLayer)) {
+      showMapLayerErrorGuidance(failedLayer, error.message);
+    }
     renderNationalMetrics();
     renderNationalHighlights();
     if (!state.selected) updateNationalProfileSummary();
@@ -7189,7 +7326,9 @@ function bindEvents() {
     input.addEventListener("change", () => {
       if (!input.checked || input.disabled) return;
       closeMapPinnedDetail();
-      document.querySelector("#map-layer-help").hidden = true;
+      const help = document.querySelector("#map-layer-help");
+      help.hidden = true;
+      delete help.dataset.layer;
       state.mapLayer = input.value;
       refreshMapStyles();
       if (window.matchMedia("(max-width: 900px)").matches) setMobileLayerPickerOpen(false);
