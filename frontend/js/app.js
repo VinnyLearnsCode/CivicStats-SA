@@ -5159,8 +5159,20 @@ function renderAirQualityStations() {
     popup.className = "air-quality-station-popup";
     const heading = document.createElement("strong");
     heading.textContent = station.name;
+    const freshness = document.createElement("span");
+    freshness.className = stale ? "air-quality-freshness stale" : "air-quality-freshness recent";
+    freshness.textContent = stale ? "Older reading · over 48 hours old" : "Recent reading · within 48 hours";
     const measure = document.createElement("p");
-    measure.textContent = `PM2.5: ${formatCensusNumber(station.pm25.value, 2)} µg/m³${stale ? " · older than 48 hours" : ""}`;
+    measure.className = "air-quality-popup-measure";
+    measure.textContent = `PM2.5 · ${formatCensusNumber(station.pm25.value, 2)} µg/m³`;
+    const comparison = document.createElement("p");
+    comparison.className = `air-quality-guideline ${station.pm25.value <= 15 ? "below" : "above"}`;
+    comparison.textContent = station.pm25.value <= 15
+      ? "At or below the WHO 24-hour guideline value (15 µg/m³)"
+      : "Above the WHO 24-hour guideline value (15 µg/m³)";
+    const context = document.createElement("p");
+    context.className = "air-quality-popup-context";
+    context.textContent = "The WHO value is a 24-hour average. This is one latest sensor reading, not a 24-hour average or an area-wide rating, so it cannot confirm whether the air is clean or safe.";
     const observed = document.createElement("p");
     observed.textContent = `Observed (South African time): ${new Date(station.pm25.observedAtUtc).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" })}`;
     const sensor = document.createElement("p");
@@ -5172,8 +5184,13 @@ function renderAirQualityStations() {
     source.target = "_blank";
     source.rel = "noopener noreferrer";
     source.textContent = "OpenAQ source ↗";
-    popup.append(heading, measure, observed, sensor, coordinates, source);
-    marker.bindPopup(popup, { maxWidth: 280 });
+    const guidelineSource = document.createElement("a");
+    guidelineSource.href = "https://www.who.int/publications/i/item/9789240034228";
+    guidelineSource.target = "_blank";
+    guidelineSource.rel = "noopener noreferrer";
+    guidelineSource.textContent = "WHO 2021 guideline ↗";
+    popup.append(heading, freshness, measure, comparison, context, observed, sensor, coordinates, source, guidelineSource);
+    marker.bindPopup(popup, { maxWidth: 320, className: "air-quality-leaflet-popup" });
     marker.addTo(group);
   });
   group.addTo(state.map);

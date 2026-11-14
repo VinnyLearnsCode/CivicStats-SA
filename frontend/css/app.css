@@ -280,6 +280,18 @@ a { color: inherit; }
 .precipitation-swatch { border-color: #588bc2; background: #3d628d; }
 .air-quality-layer-swatch { border-color: #e8f3ef; border-radius: 50%; background: #cf625f; }
 .air-quality-swatch { border-radius: 50%; }
+.leaflet-popup.air-quality-leaflet-popup .leaflet-popup-content-wrapper,
+.leaflet-popup.air-quality-leaflet-popup .leaflet-popup-tip { border: 1px solid #46534d; background: #1a211f; color: var(--text); box-shadow: 0 4px 10px #0007; }
+.air-quality-station-popup { display: grid; min-width: 220px; gap: 7px; color: var(--text); font-size: 12px; line-height: 1.45; }
+.air-quality-station-popup strong { font-size: 13px; }
+.air-quality-station-popup p { margin: 0; }
+.air-quality-freshness { width: fit-content; padding: 2px 6px; border: 1px solid #438e81; color: #a7e3d7; font: 10px var(--mono); }
+.air-quality-freshness.stale { border-color: #737d78; color: #c2cbc6; }
+.air-quality-popup-measure { font-size: 15px; font-weight: 600; }
+.air-quality-guideline { padding-left: 8px; border-left: 3px solid #438e81; font-weight: 600; }
+.air-quality-guideline.above { border-color: #d28b55; color: #f0c292; }
+.air-quality-popup-context { color: #bdc8c2; }
+.air-quality-station-popup a { width: fit-content; color: #8edbd1; font-size: 11px; text-decoration: underline; }
 .muted-swatch { border-color: #976c69; background: #674d4a; }
 .services-swatch { border-color: #6e8d7e; background: #476253; }
 .layer-state { grid-column: 2; grid-row: 3; justify-self: start; min-width: 0; color: #a0aca5; font: 10px var(--mono); line-height: 1.3; white-space: normal; overflow-wrap: anywhere; }
