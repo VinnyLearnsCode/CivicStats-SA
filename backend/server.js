@@ -2191,6 +2191,24 @@ export async function createAppServer({
       return;
     }
 
+    if (url.pathname === "/api/economy/provinces/history") {
+      jsonResponse(response, 200, {
+        availableYears: provincialGdpR.years,
+        source: provincialGdpR.source,
+        records: provincialGdpR.years.map((year) => {
+          const yearKey = String(year);
+          return {
+            year,
+            national: {
+              gdpCurrentPricesRandMillions: provincialGdpR.national.gdpCurrentPricesRandMillions[yearKey],
+              realGdpGrowthPercent: provincialGdpR.national.realGdpGrowthPercent[yearKey]
+            }
+          };
+        })
+      });
+      return;
+    }
+
     if (url.pathname === "/api/economy/provinces") {
       const requestedYear = url.searchParams.get("year") ?? "2024";
       if (!/^\d{4}$/.test(requestedYear) || !provincialGdpR.years.includes(Number(requestedYear))) {

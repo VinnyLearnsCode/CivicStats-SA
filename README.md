@@ -114,6 +114,7 @@ The additional [`electricity-lighting-muni.csv`](frontend/assets/data/electricit
 - `GET /api/health/db` — performs `SELECT 1` against PostgreSQL and returns only a safe connected/query result; returns `503` when unconfigured or unavailable.
 - `GET /api/census/municipalities?year=2011|2022` — source-linked municipality population density, calculated household water-scheme shares and reported electricity-for-lighting shares.
 - `GET /api/economy/provinces?year=2014..2024` — Stats SA GDP-R totals, contribution, real growth and industry activity for all nine provinces.
+- `GET /api/economy/provinces/history` — source-linked national GDP-R and real growth history for the chart.
 - `GET /api/municipalities/{id}/census` — municipality Census indicators with separate electricity-for-lighting source metadata.
 - `GET /api/geo/ADM1|ADM2|ADM3` — a boundary FeatureCollection.
 - `GET /api/geographies?q=...` — province, district/metro and municipality directory with parent boundary IDs, classifications and matched Census municipal codes; `q` searches names, province/district names and municipal codes. Boundary GeoJSON responses are publicly cached for one day with stale-while-revalidate.

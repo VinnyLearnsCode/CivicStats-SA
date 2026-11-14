@@ -517,6 +517,23 @@ async function getStaticApiResponse(path) {
     return { ...data.labour, totalProvinces: new Set(data.labour.records.map((record) => record.province)).size };
   }
 
+  if (url.pathname.endsWith("/api/economy/provinces/history")) {
+    return {
+      availableYears: data.gdp.years,
+      source: data.gdp.source,
+      records: data.gdp.years.map((year) => {
+        const yearKey = String(year);
+        return {
+          year,
+          national: {
+            gdpCurrentPricesRandMillions: data.gdp.national.gdpCurrentPricesRandMillions[yearKey],
+            realGdpGrowthPercent: data.gdp.national.realGdpGrowthPercent[yearKey]
+          }
+        };
+      })
+    };
+  }
+
   if (url.pathname.endsWith("/api/economy/provinces")) {
     const year = Number(url.searchParams.get("year") ?? "2024");
     if (!data.gdp.years.includes(year)) throw new Error(`GDP-R reporting year ${year} is not available in the bundled dataset.`);
@@ -6128,34 +6145,51 @@ function renderNationalGdpHistory() {
   });
 }
 
+function observeNationalGdpHistory() {
+  const container = document.querySelector("#national-trends");
+  if (!container) return;
+  if (!("IntersectionObserver" in window)) {
+    void loadNationalGdpHistory();
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    void loadNationalGdpHistory();
+  }, { rootMargin: "0px 0px 320px 0px" });
+  observer.observe(container);
+}
+
 async function loadNationalGdpHistory() {
   if (state.nationalGdpHistory || state.nationalGdpHistoryLoading) return;
   state.nationalGdpHistoryLoading = true;
   state.nationalGdpHistoryError = null;
   renderNationalGdpHistory();
   try {
-    const current = state.provincialEconomyData ?? await loadProvincialGdpData(state.economyMapYear);
-    const years = current?.availableYears;
-    if (!Array.isArray(years) || years.length < 2) {
+    const result = await getJson("/api/economy/provinces/history");
+    const years = result.availableYears;
+    const records = result.records;
+    if (!Array.isArray(years) || years.length < 2 ||
+      !years.every(Number.isInteger) ||
+      new Set(years).size !== years.length ||
+      !Array.isArray(records) || records.length !== years.length) {
       throw new Error("Stats SA national GDP history years are unavailable.");
     }
-    const datasets = await Promise.all(years.map((year) => getJson(`/api/economy/provinces?year=${year}`)));
-    const records = datasets.map((dataset) => ({
-      year: dataset.year,
-      gdpCurrentPricesRandBillions: dataset.national?.gdpCurrentPricesRandMillions / 1000,
-      realGdpGrowthPercent: dataset.national?.realGdpGrowthPercent
-    }));
-    const sourceValid = datasets.every((dataset, index) =>
-      dataset.year === years[index] &&
-      dataset.source?.publisher === "Statistics South Africa" &&
-      dataset.source?.reportNumber === "P0441.2" &&
-      dataset.source?.geographyLevel === "Province" &&
-      dataset.source?.url?.startsWith("https://") &&
-      Number.isFinite(dataset.national?.gdpCurrentPricesRandMillions) &&
-      Number.isFinite(dataset.national?.realGdpGrowthPercent)
+    const sourceValid = result.source?.publisher === "Statistics South Africa" &&
+      result.source?.reportNumber === "P0441.2" &&
+      result.source?.geographyLevel === "Province" &&
+      result.source?.url?.startsWith("https://") &&
+      records.every((record, index) =>
+        record?.year === years[index] &&
+        Number.isFinite(record.national?.gdpCurrentPricesRandMillions) &&
+        Number.isFinite(record.national?.realGdpGrowthPercent)
     );
     if (!sourceValid) throw new Error("Stats SA GDP-R history was incomplete or failed source validation.");
-    state.nationalGdpHistory = records;
+    state.nationalGdpHistory = records.map((record) => ({
+      year: record.year,
+      gdpCurrentPricesRandBillions: record.national.gdpCurrentPricesRandMillions / 1000,
+      realGdpGrowthPercent: record.national.realGdpGrowthPercent
+    }));
   } catch (error) {
     state.nationalGdpHistoryError = error.message;
   } finally {
@@ -7377,6 +7411,7 @@ async function initialize() {
   renderNationalHighlights();
   renderNationalMetrics();
   renderNationalGdpHistory();
+  observeNationalGdpHistory();
   renderDetail();
   updateNavigation();
   if (typeof L === "undefined") {
@@ -7431,7 +7466,6 @@ async function initialize() {
     void loadProvincialLabourData();
     void loadProvincialGdpData(state.economyMapYear).then(() => {
       renderNationalMetrics();
-      void loadNationalGdpHistory();
     });
     loadNationalDashboardEconomy();
     renderNationalHighlights();

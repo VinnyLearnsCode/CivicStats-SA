@@ -455,6 +455,22 @@ test("Stats SA provincial GDP-R returns nine provinces, source-linked activity a
   assert.equal(latest.national.gdpCurrentPricesRandMillions, 7352449);
 });
 
+test("Stats SA national GDP-R history is returned as one source-linked response", async () => {
+  const response = await get("/api/economy/provinces/history");
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result.availableYears, [2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]);
+  assert.equal(result.source.publisher, "Statistics South Africa");
+  assert.equal(result.source.reportNumber, "P0441.2");
+  assert.equal(result.records.length, result.availableYears.length);
+  assert.equal(result.records.every((record, index) =>
+    record.year === result.availableYears[index] &&
+    Number.isFinite(record.national.gdpCurrentPricesRandMillions) &&
+    Number.isFinite(record.national.realGdpGrowthPercent)
+  ), true);
+  assert.equal(result.records.at(-1).national.gdpCurrentPricesRandMillions, 7352449);
+});
+
 test("provincial GDP-R endpoint rejects unsupported and malformed years", async () => {
   for (const year of ["2013", "2025", "2024abc", "2014.5"]) {
     const response = await get(`/api/economy/provinces?year=${year}`);
