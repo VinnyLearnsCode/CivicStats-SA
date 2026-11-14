@@ -775,7 +775,7 @@ async function loadStaticWorkspaceData() {
     sources,
     municipalities: municipalityDirectory,
     geographies: buildGeographyDirectory(collections, municipalityDirectory),
-    collection
+    collection: collections.get(state.boundaryLevel)
   };
 }
 
@@ -789,7 +789,7 @@ async function loadWorkspaceData() {
       getJson("/api/sources"),
       getJson("/api/municipalities"),
       getJson("/api/geographies"),
-      getJson("/api/geo/ADM3")
+      getJson(`/api/geo/${state.boundaryLevel}`)
     ]);
     return {
       health,
@@ -7404,6 +7404,10 @@ async function initialize() {
   L.control.zoom({ position: "bottomright" }).addTo(state.map);
   L.control.scale({ imperial: false, position: "bottomright", maxWidth: 90 }).addTo(state.map);
   state.map.setView([-29, 24], 5);
+  if (state.autoBoundaryDetail) {
+    state.boundaryLevel = boundaryLevelForZoom();
+    document.querySelector("#boundary-level").value = state.boundaryLevel;
+  }
   if ("ResizeObserver" in window) {
     state.mapResizeObserver = new ResizeObserver(() => state.map?.invalidateSize({ pan: false }));
     state.mapResizeObserver.observe(mapElement);
@@ -7419,16 +7423,9 @@ async function initialize() {
     state.municipalities = municipalities;
     state.geographies = geographies;
     updateNationalProfileSummary();
-    state.collections.set("ADM3", collection);
+    state.collections.set(state.boundaryLevel, collection);
     state.autoBoundaryReady = true;
-    let startupCollection = collection;
-    if (state.boundaryLevel !== "ADM3") {
-      try {
-        startupCollection = await ensureBoundaryCollection(state.boundaryLevel);
-      } catch {
-        state.boundaryLevel = "ADM3";
-      }
-    }
+    const startupCollection = collection;
     void loadLiveSourceData();
     void loadCensusMapData(state.censusMapYear);
     void loadProvincialLabourData();
