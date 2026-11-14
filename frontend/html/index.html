@@ -398,13 +398,29 @@
     <div class="mobile-scrim" id="mobile-scrim" hidden></div>
     <dialog class="indicator-guide" id="indicator-guide" aria-labelledby="indicator-guide-title">
       <header class="indicator-guide-header">
-        <div><span class="panel-kicker">CIVICSTATS SA · HOW TO READ THE DATA</span><h2 id="indicator-guide-title">Indicator guide</h2><p>Definitions, reporting periods, sources and limits for the measures shown in CivicStats.</p></div>
+        <div><span class="panel-kicker">CIVICSTATS SA · HOW TO READ THE DATA</span><h2 id="indicator-guide-title">Indicator guide</h2><p>Definitions, reporting periods, sources and limits for the measures shown in CivicStats.</p><button class="action-button welcome-tour-replay" id="start-welcome-tour" type="button">Take the quick tour</button></div>
         <button class="square-button" id="indicator-guide-close" type="button" aria-label="Close indicator guide">×</button>
       </header>
       <label class="indicator-guide-search-label" for="indicator-guide-search">SEARCH INDICATORS</label>
       <input id="indicator-guide-search" class="indicator-guide-search" type="search" placeholder="Try population, jobs, services, budget…" autocomplete="off" aria-describedby="indicator-guide-count">
       <p class="indicator-guide-count" id="indicator-guide-count" aria-live="polite"></p>
       <div class="indicator-guide-list" id="indicator-guide-list"></div>
+    </dialog>
+    <dialog class="welcome-tour" id="welcome-tour" aria-labelledby="welcome-tour-title" aria-describedby="welcome-tour-description">
+      <span class="panel-kicker">CIVICSTATS SA · QUICK TOUR</span>
+      <h2 id="welcome-tour-title" tabindex="-1">Explore CivicStats SA</h2>
+      <p class="welcome-tour-intro" id="welcome-tour-description">Three quick steps to find a place, explore the map and understand the data.</p>
+      <p class="welcome-tour-progress" id="welcome-tour-progress" role="status" aria-live="polite"></p>
+      <h3 id="welcome-tour-step-title"></h3>
+      <p class="welcome-tour-step-description" id="welcome-tour-step-description" aria-live="polite"></p>
+      <div class="welcome-tour-actions">
+        <button class="action-button welcome-tour-action" id="welcome-tour-action" type="button"></button>
+        <div class="welcome-tour-navigation">
+          <button class="action-button" id="welcome-tour-back" type="button" hidden>Back</button>
+          <button class="action-button" id="welcome-tour-next" type="button">Next</button>
+        </div>
+      </div>
+      <button class="welcome-tour-skip" id="welcome-tour-skip" type="button">Skip tour</button>
     </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </body>

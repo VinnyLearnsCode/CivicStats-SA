@@ -1,8 +1,11 @@
 const OPENAQ_SETUP_ERROR = "Air-quality station data is not configured on this server.";
 
+const WELCOME_TOUR_STORAGE_KEY = "civicstats-sa-welcome-tour-v1";
+
 const state = {
   view: "dashboard",
   tab: "overview",
+  welcomeTourStep: 0,
   boundaryLevel: "ADM3",
   autoBoundaryDetail: true,
   autoBoundaryReady: false,
@@ -208,6 +211,27 @@ const viewCopy = {
   profile: ["User profile", "No account data is collected by this prototype"],
   settings: ["Settings", "Workspace settings are not available in this read-only prototype"]
 };
+
+const welcomeTourSteps = [
+  {
+    title: "Find a place",
+    description: "Search for a province, district or municipality, or select an area on the map to open its profile.",
+    actionLabel: "Try geographic search",
+    action: "search"
+  },
+  {
+    title: "Explore the map",
+    description: "Choose a boundary level and map layer. Check the layer coverage and map key for reporting periods, sources and gaps.",
+    actionLabel: "Show map layers",
+    action: "layers"
+  },
+  {
+    title: "Compare and verify",
+    description: "Compare municipalities side by side, review Data sources and the indicator guide, or copy a link to share your current view.",
+    actionLabel: "Open comparisons",
+    action: "comparisons"
+  }
+];
 
 const mapElement = document.querySelector("#map");
 const appRoot = new URL("../", document.currentScript.src);
@@ -889,6 +913,68 @@ function renderIndicatorGuide(query = "") {
     article.append(header, definition, metadata);
     list.append(article);
   });
+}
+
+function renderWelcomeTourStep() {
+  const step = welcomeTourSteps[state.welcomeTourStep];
+  if (!step) return;
+  document.querySelector("#welcome-tour-progress").textContent =
+    `STEP ${state.welcomeTourStep + 1} OF ${welcomeTourSteps.length}`;
+  document.querySelector("#welcome-tour-step-title").textContent = step.title;
+  document.querySelector("#welcome-tour-step-description").textContent = step.description;
+  document.querySelector("#welcome-tour-action").textContent = step.actionLabel;
+  document.querySelector("#welcome-tour-back").hidden = state.welcomeTourStep === 0;
+  document.querySelector("#welcome-tour-next").textContent =
+    state.welcomeTourStep === welcomeTourSteps.length - 1 ? "Finish" : "Next";
+}
+
+function openWelcomeTour() {
+  const indicatorGuide = document.querySelector("#indicator-guide");
+  if (indicatorGuide.open) indicatorGuide.close();
+  state.welcomeTourStep = 0;
+  renderWelcomeTourStep();
+  document.querySelector("#welcome-tour").showModal();
+  document.querySelector("#welcome-tour-title").focus();
+}
+
+function maybeShowWelcomeTour(sharedParams) {
+  if (sharedParams.size > 0) return;
+  try {
+    if (localStorage.getItem(WELCOME_TOUR_STORAGE_KEY) === "seen") return;
+  } catch (error) {
+    showToast(`Could not check the saved tour preference: ${error.message}`);
+    return;
+  }
+  openWelcomeTour();
+}
+
+function markWelcomeTourSeen() {
+  try {
+    localStorage.setItem(WELCOME_TOUR_STORAGE_KEY, "seen");
+  } catch (error) {
+    showToast(`Could not save the tour preference: ${error.message}. The tour may appear again on your next visit.`);
+  }
+}
+
+function dismissWelcomeTour() {
+  markWelcomeTourSeen();
+  document.querySelector("#welcome-tour").close();
+}
+
+function runWelcomeTourAction() {
+  const action = welcomeTourSteps[state.welcomeTourStep]?.action;
+  dismissWelcomeTour();
+  if (action === "search") {
+    setView("dashboard");
+    document.querySelector("#global-search").focus();
+  } else if (action === "layers") {
+    setView("dashboard");
+    setMobileLayerPickerOpen(true);
+    document.querySelector("#mobile-layer-toggle").focus();
+  } else if (action === "comparisons") {
+    setView("comparisons");
+    document.querySelector('.nav-link[data-view="comparisons"]')?.focus();
+  }
 }
 
 function safeText(value) {
@@ -7428,6 +7514,29 @@ function bindEvents() {
   document.querySelector("#indicator-guide").addEventListener("click", (event) => {
     if (event.target === event.currentTarget) event.currentTarget.close();
   });
+  document.querySelector("#start-welcome-tour").addEventListener("click", openWelcomeTour);
+  const welcomeTour = document.querySelector("#welcome-tour");
+  welcomeTour.addEventListener("cancel", markWelcomeTourSeen);
+  welcomeTour.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    dismissWelcomeTour();
+  });
+  document.querySelector("#welcome-tour-skip").addEventListener("click", dismissWelcomeTour);
+  document.querySelector("#welcome-tour-back").addEventListener("click", () => {
+    if (state.welcomeTourStep === 0) return;
+    state.welcomeTourStep -= 1;
+    renderWelcomeTourStep();
+  });
+  document.querySelector("#welcome-tour-next").addEventListener("click", () => {
+    if (state.welcomeTourStep === welcomeTourSteps.length - 1) {
+      dismissWelcomeTour();
+      return;
+    }
+    state.welcomeTourStep += 1;
+    renderWelcomeTourStep();
+  });
+  document.querySelector("#welcome-tour-action").addEventListener("click", runWelcomeTourAction);
   document.querySelector("#sidebar-toggle").addEventListener("click", () => {
     document.body.classList.toggle("sidebar-collapsed");
     setTimeout(() => state.map?.invalidateSize(), 200);
@@ -7644,6 +7753,7 @@ async function initialize() {
     if (requestedView && Object.hasOwn(viewCopy, requestedView) && requestedView !== "comparisons" && !comparisonIds.length) {
       setView(requestedView);
     }
+    maybeShowWelcomeTour(sharedParams);
   } catch (error) {
     document.querySelector("#map-loading").hidden = true;
     const mapError = document.querySelector("#map-error");
