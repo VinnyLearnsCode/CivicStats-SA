@@ -505,7 +505,13 @@ test("the browser application is served with security headers", async () => {
   assert.match(html, /National geographic explorer/);
   assert.match(html, /id="indicator-guide"/);
   assert.match(html, /aria-label="Open indicator guide"/);
-  assert.match(html, /nav-link-planned[^>]*disabled[^>]*>.*?Roads &amp; transport.*?Planned/);
+  const unavailableNavigation = html.match(/<details class="nav-group nav-group-unavailable">([\s\S]*?)<\/details>/)?.[1];
+  assert.ok(unavailableNavigation);
+  assert.match(html, /<summary class="nav-group-summary">More tools <span class="nav-status">5 planned · 1 API only<\/span><\/summary>/);
+  assert.match(unavailableNavigation, /These tools are not available in the public dashboard yet/);
+  assert.equal((unavailableNavigation.match(/class="nav-link nav-link-planned"/g) ?? []).length, 6);
+  assert.match(unavailableNavigation, /Roads &amp; transport/);
+  assert.match(unavailableNavigation, /Data imports <span class="nav-status">API only/);
   assert.doesNotMatch(html, /data-view="(?:reports|history|research|profile|settings|imports)"/);
   assert.doesNotMatch(html, /data-view="(?:national|workspace)"/);
 });
